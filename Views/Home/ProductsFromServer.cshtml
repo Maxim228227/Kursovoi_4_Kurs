@@ -1,0 +1,33 @@
+@model IEnumerable<Kursovoi.Models.ProductViewModel>
+@{
+    ViewData["Title"] = "Products from Server";
+}
+
+<h1>Products from Server</h1>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Manufacturer</th>
+            <th>Price</th>
+            <th>Qty</th>
+            <th>Store</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var p in Model)
+        {
+            <tr>
+                <td>@p.ProductID</td>
+                <td>@p.ProductName</td>
+                <td>@p.CategoryName</td>
+                <td>@p.ManufacturerName</td>
+                <td>@p.Price.ToString("C")</td>
+                <td>@p.Quantity</td>
+                <td>@p.StoreName</td>
+            </tr>
+        }
+    </tbody>
+</table>
