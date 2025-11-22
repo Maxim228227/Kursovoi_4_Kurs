@@ -12,7 +12,7 @@
     <header>
         <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
             <div class="container-fluid">
-                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">Электронный каталог</a>
+                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">МаркетPRO</a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
                         aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
@@ -32,6 +32,17 @@
                             <a class="nav-link text-dark" asp-controller="Reports" asp-action="Index">Отчёты</a>
                         </li>
                     </ul>
+
+                    <div class="d-flex align-items-center ms-3">
+                        <span class="top-right-store-name me-3">МаркетPRO</span>
+                        <a class="btn auth-btn" href="/Account/Login" title="Войти" aria-label="Войти">
+                            <!-- person icon SVG -->
+                            <svg class="auth-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                        </a>
+                    </div>
                 </div>
             </div>
         </nav>
@@ -44,7 +55,6 @@
 
     <footer class="border-top footer text-muted">
         <div class="container">
-            &copy; 2025 - Электронный распределённый каталог товаров для сетевых розничных магазинов
         </div>
     </footer>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>

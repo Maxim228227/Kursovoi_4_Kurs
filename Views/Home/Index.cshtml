@@ -1,55 +1,129 @@
 ﻿@model IEnumerable<Kursovoi.Models.ProductViewModel>
 @{
     ViewData["Title"] = "Интернет-магазин";
+
+    var suggestions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var brands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    decimal maxPrice = 0;
+
+    if (Model != null)
+    {
+        foreach (var p in Model)
+        {
+            if (!string.IsNullOrWhiteSpace(p.ProductName)) suggestions.Add(p.ProductName);
+            if (!string.IsNullOrWhiteSpace(p.ManufacturerName)) suggestions.Add(p.ManufacturerName);
+            if (!string.IsNullOrWhiteSpace(p.CategoryName)) suggestions.Add(p.CategoryName);
+            if (!string.IsNullOrWhiteSpace(p.CategoryName)) categories.Add(p.CategoryName);
+            if (!string.IsNullOrWhiteSpace(p.ManufacturerName)) brands.Add(p.ManufacturerName);
+            if (p.Price > maxPrice) maxPrice = p.Price;
+        }
+    }
+
+    var req = Context.Request.Query;
+    var q = req["q"].FirstOrDefault() ?? string.Empty;
+    var cat = req["cat"].FirstOrDefault() ?? string.Empty;
+    var brand = req["brand"].FirstOrDefault() ?? string.Empty;
+    var minStr = req["min"].FirstOrDefault() ?? string.Empty;
+    var maxStr = req["max"].FirstOrDefault() ?? string.Empty;
+    var instock = req["instock"].FirstOrDefault() ?? string.Empty;
+    var sort = req["sort"].FirstOrDefault() ?? string.Empty;
+
+    // Helper to format price: omit trailing ".00" when price is whole
+    Func<decimal, string> FormatPrice = price => decimal.Truncate(price) == price ? $"{price:0} Br" : $"{price:0.##} Br";
 }
 
-<div class="py-4 text-center">
+<div class="store-hero text-center">
     <h1 class="display-5">Интернет-магазин</h1>
-    <p class="lead">Каталог товаров из распределённого сервера. Нажмите "Обновить" для повторного запроса.</p>
+    <p class="lead">Каталог товаров из распределённого сервера. Быстрый поиск и удобные карточки товаров.</p>
 </div>
+
+<form method="get" class="mb-3" id="filtersForm">
+    <div class="input-group">
+        <input type="search" name="q" class="form-control" placeholder="Поиск по товарам, брендам, категориям..." value="@q" list="suggestions" aria-label="Поиск" />
+        <button class="btn btn-outline-secondary" type="submit">Поиск</button>
+        <a class="btn btn-outline-primary" href="/">Сброс</a>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-2">
+        <div class="text-muted-small">Тут можно быстро найти товар</div>
+        <button class="btn btn-filter btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#filtersCollapse" aria-expanded="false" aria-controls="filtersCollapse">Фильтры ▾</button>
+    </div>
+
+    <div class="collapse mt-3" id="filtersCollapse">
+        <div class="filters-row">
+            <select name="cat" class="form-select">
+                <option value="">Все категории</option>
+                @foreach (var c in categories)
+                {
+                    <option value="@c" selected="@(c == cat ? "selected" : null)">@c</option>
+                }
+            </select>
+
+            <select name="brand" class="form-select">
+                <option value="">Все бренды</option>
+                @foreach (var b in brands)
+                {
+                    <option value="@b" selected="@(b == brand ? "selected" : null)">@b</option>
+                }
+            </select>
+
+            <input type="number" name="min" class="form-control" placeholder="Мин цена" value="@minStr" min="0" step="0.01" />
+            <input type="number" name="max" class="form-control" placeholder="Макс цена" value="@maxStr" min="0" step="0.01" />
+
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="instock" name="instock" checked="@(instock == "on" ? "checked" : null)" />
+                <label class="form-check-label" for="instock">В наличии</label>
+            </div>
+
+            <select name="sort" class="form-select">
+                <option value="">Сортировать</option>
+                <option value="price_asc" selected="@(sort == "price_asc" ? "selected" : null)">Цена ↑</option>
+                <option value="price_desc" selected="@(sort == "price_desc" ? "selected" : null)">Цена ↓</option>
+                <option value="name_asc" selected="@(sort == "name_asc" ? "selected" : null)">Название ↑</option>
+                <option value="name_desc" selected="@(sort == "name_desc" ? "selected" : null)">Название ↓</option>
+                <option value="rating_desc" selected="@(sort == "rating_desc" ? "selected" : null)">Рейтинг</option>
+            </select>
+        </div>
+    </div>
+</form>
 
 @if (!string.IsNullOrEmpty(ViewBag.ServerResponse as string))
 {
     <div class="alert alert-info">Сервер: @ViewBag.ServerResponse</div>
 }
 
-<form method="post" class="mb-3">
-    <div class="input-group">
-        <input type="text" name="userMessage" class="form-control" placeholder="Отправить команду серверу (например: getproducts)" />
-        <button class="btn btn-primary" type="submit">Отправить</button>
-    </div>
-</form>
+<div class="mb-3 d-flex justify-content-between align-items-center">
+    <div>Найдено товаров: <strong>@(Model?.Count() ?? 0)</strong></div>
+    <div class="text-muted-small">Показываются данные из удалённого каталога</div>
+</div>
 
-<p>Найдено товаров: <strong>@(Model?.Count() ?? 0)</strong></p>
-
-<div class="row">
+<div class="product-grid">
     @if (Model != null && Model.Any())
     {
         foreach (var p in Model)
         {
-            <div class="col-12 col-sm-6 col-md-4 col-lg-3 mb-4">
-                <div class="card h-100 shadow-sm">
-                    <img src="@p.ImageUrl" class="card-img-top" alt="@p.ProductName" style="height:180px; object-fit:contain; background:#f8f9fa;" />
-                    <div class="card-body d-flex flex-column">
-                        <h6 class="card-title">@p.ProductName</h6>
-                        <p class="card-text text-muted small">@p.Description</p>
-                        <div class="small text-muted mb-2">Бренд: @p.ManufacturerName • Категория: @p.CategoryName</div>
-                        <div class="mt-auto">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <strong class="fs-6">@p.Price.ToString("C")</strong>
-                                @if (p.Quantity > 0)
-                                {
-                                    <span class="badge bg-success">В наличии: @p.Quantity</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-secondary">Нет в наличии</span>
-                                }
-                            </div>
-                            <div class="d-grid gap-2 d-md-flex">
-                                <a class="btn btn-sm btn-primary me-2" href="#">В корзину</a>
-                                <a class="btn btn-sm btn-outline-secondary" href="#">Подробнее</a>
-                            </div>
+            <div class="card store-card">
+                <img src="@p.ImageUrl" class="card-img-top" alt="@p.ProductName" />
+                <div class="card-body d-flex flex-column">
+                    <h6 class="card-title">@p.ProductName</h6>
+                    <p class="card-text">@p.Description</p>
+                    <div class="small text-muted mb-2">Бренд: @p.ManufacturerName • Категория: @p.CategoryName</div>
+                    <div class="mt-auto">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div class="price">@FormatPrice(p.Price)</div>
+                            @if (p.Quantity > 0)
+                            {
+                                <span class="badge instock">В наличии: @p.Quantity</span>
+                            }
+                            else
+                            {
+                                <span class="badge out">Нет в наличии</span>
+                            }
+                        </div>
+                        <div class="card-actions">
+                            <a class="btn btn-sm primary" href="#">В корзину</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="#">Подробнее</a>
                         </div>
                     </div>
                 </div>
@@ -63,3 +137,21 @@
         </div>
     }
 </div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var form = document.getElementById('filtersForm');
+            if (!form) return;
+            var controls = form.querySelectorAll('.filters-row select, .filters-row input');
+            controls.forEach(function(ctrl) {
+                ctrl.addEventListener('change', function() {
+                    // only submit when the collapse is closed or control is not inside collapse
+                    var collapseEl = document.getElementById('filtersCollapse');
+                    // submit immediately
+                    form.submit();
+                });
+            });
+        });
+    </script>
+}

@@ -2,14 +2,78 @@ using Kursovoi.Models; // подключаем класс UdpClientHelper
 using Microsoft.AspNetCore.Mvc;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 
 namespace Kursovoi.Controllers
 {
     public class HomeController : Controller
     {
-        public IActionResult Index()
+        [HttpGet]
+        [ActionName("Index")]
+        public IActionResult IndexGet(string q = null, string cat = null, string brand = null, string min = null, string max = null, string instock = null, string sort = null)
         {
             var list = GetProductsFromServer();
+
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var qq = q.Trim();
+                list = list.Where(p =>
+                    (p.ProductName ?? string.Empty).Contains(qq, StringComparison.OrdinalIgnoreCase)
+                    || (p.Description ?? string.Empty).Contains(qq, StringComparison.OrdinalIgnoreCase)
+                    || (p.CategoryName ?? string.Empty).Contains(qq, StringComparison.OrdinalIgnoreCase)
+                    || (p.ManufacturerName ?? string.Empty).Contains(qq, StringComparison.OrdinalIgnoreCase)
+                ).ToList();
+                ViewBag.SearchQuery = q;
+            }
+
+            if (!string.IsNullOrWhiteSpace(cat))
+            {
+                list = list.Where(p => string.Equals(p.CategoryName ?? string.Empty, cat.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(brand))
+            {
+                list = list.Where(p => string.Equals(p.ManufacturerName ?? string.Empty, brand.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(min) && decimal.TryParse(min, NumberStyles.Any, CultureInfo.InvariantCulture, out var minVal))
+            {
+                list = list.Where(p => p.Price >= minVal).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(max) && decimal.TryParse(max, NumberStyles.Any, CultureInfo.InvariantCulture, out var maxVal))
+            {
+                list = list.Where(p => p.Price <= maxVal).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(instock) && instock == "on")
+            {
+                list = list.Where(p => p.Quantity > 0).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(sort))
+            {
+                switch (sort)
+                {
+                    case "price_asc":
+                        list = list.OrderBy(p => p.Price).ToList();
+                        break;
+                    case "price_desc":
+                        list = list.OrderByDescending(p => p.Price).ToList();
+                        break;
+                    case "name_asc":
+                        list = list.OrderBy(p => p.ProductName).ToList();
+                        break;
+                    case "name_desc":
+                        list = list.OrderByDescending(p => p.ProductName).ToList();
+                        break;
+                    case "rating_desc":
+                        // rating unavailable; fallback to quantity desc
+                        list = list.OrderByDescending(p => p.Quantity).ToList();
+                        break;
+                }
+            }
+
             return View(list);
         }
 
@@ -72,7 +136,7 @@ namespace Kursovoi.Controllers
                             Phone = parts[12],
                             Price = decimal.TryParse(parts[13], NumberStyles.Any, CultureInfo.InvariantCulture, out var pr) ? pr : 0m,
                             Discount = decimal.TryParse(parts[14], NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : 0m,
-                            Quantity = int.TryParse(parts[15], out var q) ? q : 0,
+                            Quantity = int.TryParse(parts[15], out var qn) ? qn : 0,
                             ImageUrl = imageUrl
                         };
                         list.Add(vm);
