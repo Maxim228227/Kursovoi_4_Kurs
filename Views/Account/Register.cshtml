@@ -1,0 +1,42 @@
+@model Kursovoi.Models.RegisterViewModel
+@{
+    ViewData["Title"] = "Регистрация";
+}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Регистрация</h4>
+                    <form asp-action="Register" method="post">
+                        @Html.AntiForgeryToken()
+                        <div class="mb-3">
+                            <label asp-for="Login" class="form-label">Логин</label>
+                            <input asp-for="Login" class="form-control" placeholder="Имя пользователя" />
+                            <div class="form-text">Введите уникальный логин, например: user123</div>
+                            <span asp-validation-for="Login" class="text-danger"></span>
+                        </div>
+                        <div class="mb-3">
+                            <label asp-for="Password" class="form-label">Пароль</label>
+                            <input asp-for="Password" class="form-control" placeholder="Не менее 6 символов" />
+                            <div class="form-text">Пароль должен быть не менее 6 символов.</div>
+                            <span asp-validation-for="Password" class="text-danger"></span>
+                        </div>
+                        <div class="mb-3">
+                            <label asp-for="ConfirmPassword" class="form-label">Повторите пароль</label>
+                            <input asp-for="ConfirmPassword" class="form-control" placeholder="Повторите пароль" />
+                            <span asp-validation-for="ConfirmPassword" class="text-danger"></span>
+                        </div>
+                        <div class="mb-3">
+                            <label asp-for="Phone" class="form-label">Телефон</label>
+                            <input asp-for="Phone" class="form-control" placeholder="+375XXXXXXXXX" />
+                            <div class="form-text">Номер телефона необязателен, но поможет восстановить доступ.</div>
+                            <span asp-validation-for="Phone" class="text-danger"></span>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

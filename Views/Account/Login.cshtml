@@ -1,0 +1,38 @@
+@model Kursovoi.Models.LoginViewModel
+@{
+    ViewData["Title"] = "Вход";
+}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Вход</h4>
+                    @if(TempData["AuthMessage"] != null)
+                    {
+                        <div class="alert alert-info">@TempData["AuthMessage"]</div>
+                    }
+                    <form asp-action="Login" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+                        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+                        <div class="mb-3">
+                            <label asp-for="Login" class="form-label">Логин</label>
+                            <input asp-for="Login" class="form-control" placeholder="Ваш логин" />
+                            <div class="form-text">Используйте логин, зарегистрированный в системе.</div>
+                            <span asp-validation-for="Login" class="text-danger"></span>
+                        </div>
+                        <div class="mb-3">
+                            <label asp-for="Password" class="form-label">Пароль</label>
+                            <input asp-for="Password" class="form-control" placeholder="Ваш пароль" />
+                            <div class="form-text">Введите ваш пароль.</div>
+                            <span asp-validation-for="Password" class="text-danger"></span>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Войти</button>
+                        <a asp-action="Register" class="btn btn-link">Зарегистрироваться</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

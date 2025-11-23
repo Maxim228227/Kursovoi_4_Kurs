@@ -1,0 +1,62 @@
+@model IEnumerable<Kursovoi.Models.ProductViewModel>
+@{
+    ViewData["Title"] = "Оформление заказа";
+    Func<decimal, string> FormatPrice = price => decimal.Truncate(price) == price ? $"{price:0} Br" : $"{price:0.##} Br";
+    decimal total = 0m;
+}
+
+<div class="store-hero text-center mb-4">
+    <h1 class="display-5">Оформление заказа</h1>
+</div>
+
+@if (Model == null || !Model.Any())
+{
+    <div class="alert alert-warning">Нет выбранных товаров.</div>
+}
+else
+{
+    <form method="post" asp-controller="Cart" asp-action="ConfirmCheckout">
+        @Html.AntiForgeryToken()
+        <div asp-validation-summary="All" class="text-danger mb-3"></div>
+        <table class="table">
+            <thead><tr><th>Товар</th><th>Цена</th><th>Кол-во</th><th>Сумма</th></tr></thead>
+            <tbody>
+                @foreach(var p in Model)
+                {
+                    var effective = p.Price * (1 - p.Discount/100m);
+                    var lineTotal = effective * p.Quantity;
+                    total += lineTotal;
+                    <tr>
+                        <td><a asp-controller="Home" asp-action="Details" asp-route-id="@p.ProductID">@p.ProductName</a></td>
+                        <td>@FormatPrice(effective)</td>
+                        <td>@p.Quantity</td>
+                        <td>@FormatPrice(lineTotal)</td>
+                    </tr>
+                    <input type="hidden" name="productIds" value="@p.ProductID" />
+                }
+            </tbody>
+        </table>
+
+        <div class="mb-3">
+            <label class="form-label">Способ оплаты</label>
+            <select class="form-select" name="paymentMethod" required>
+                <option value="">-- Выберите способ оплаты --</option>
+                <option value="Картой">Картой</option>
+                <option value="Наличными">Наличными</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Адрес доставки</label>
+            <input class="form-control" name="deliveryAddress" required />
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center">
+            <div></div>
+            <div>
+                <h5>Итого к оплате: <strong>@(total % 1 == 0 ? $"{total:0} Br" : $"{total:0.##} Br")</strong></h5>
+                <button class="btn btn-primary">Подтвердить и оформить</button>
+                <a class="btn btn-outline-secondary ms-2" asp-controller="Cart" asp-action="Index">Отмена</a>
+            </div>
+        </div>
+    </form>
+}

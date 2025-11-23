@@ -21,5 +21,6 @@ namespace Kursovoi.Models
         public decimal Discount { get; set; }
         public int Quantity { get; set; }
         public string ImageUrl { get; set; } = string.Empty;
+        public int StoreID { get; set; }
     }
 }

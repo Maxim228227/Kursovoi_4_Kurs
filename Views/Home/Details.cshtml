@@ -1,0 +1,175 @@
+@model Kursovoi.Models.ProductViewModel
+@{
+    ViewData["Title"] = Model?.ProductName ?? "Товар";
+    var reviewCount = ViewBag.ReviewCount as int? ?? 0;
+    var avgRating = ViewBag.AverageRating as decimal? ?? 0m;
+    var reviews = ViewBag.Reviews as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+
+<div class="store-hero">
+    <h2>@Model.ProductName</h2>
+    <div class="small text-muted">@Model.CategoryName • @Model.ManufacturerName</div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-md-5">
+        <img src="@Model.ImageUrl" alt="@Model.ProductName" class="img-fluid" style="background:#fff; padding:12px; border-radius:8px;" />
+    </div>
+    <div class="col-md-7">
+        <h4>@(Model.Discount>0 ? (Model.Price*(1-Model.Discount/100m)).ToString("0.##") + " Br" : Model.Price.ToString("0.##") + " Br")</h4>
+        @if (Model.Discount>0)
+        {
+            <div class="text-muted small"><s>@Model.Price.ToString("0.##") Br</s> (-@Model.Discount% скидка)</div>
+        }
+
+        <p class="mt-3">@Model.Description</p>
+
+        <ul class="list-unstyled">
+            <li><strong>Производитель:</strong> @Model.ManufacturerName</li>
+            <li><strong>Страна:</strong> @Model.Country</li>
+            <li><strong>Магазин:</strong> @Model.StoreName</li>
+            <li><strong>Адрес:</strong> @Model.Address, @Model.City</li>
+            <li><strong>Телефон:</strong> @Model.Phone</li>
+            <li><strong>В наличии:</strong> @(Model.Quantity>0 ? Model.Quantity.ToString() : "Нет в наличии")</li>
+        </ul>
+
+        <div class="mt-3">
+            <form method="post" asp-controller="Cart" asp-action="Add" class="d-inline add-to-cart-form">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="productId" value="@Model.ProductID" />
+                <button type="submit" class="btn btn-primary">Добавить в корзину</button>
+            </form>
+            <a class="btn btn-outline-secondary ms-2" asp-controller="Home" asp-action="Index">Назад к каталогу</a>
+        </div>
+
+        <hr />
+        <div>
+            <h5>Отзывы (@reviewCount) — Средний балл: @(reviewCount>0 ? String.Format("{0:0.##}", avgRating) : "—")</h5>
+
+            @if (TempData["AuthMessage"] != null)
+            {
+                <div class="alert alert-info">@TempData["AuthMessage"]</div>
+            }
+
+            @* Place review form above the list *@
+            @if (User?.Identity?.IsAuthenticated == true)
+            {
+                <form id="addReviewForm">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="productId" value="@Model.ProductID" />
+                    <div class="mb-2">
+                        <label class="form-label">Заголовок</label>
+                        <input class="form-control" name="title" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Текст отзыва</label>
+                        <textarea class="form-control" name="reviewText" rows="3"></textarea>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Оценка</label>
+                        <select name="rating" class="form-select">
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                        </select>
+                    </div>
+                    <button id="addReviewBtn" class="btn btn-primary">Отправить отзыв</button>
+                </form>
+            }
+            else
+            {
+                <div class="alert alert-info">Чтобы оставить отзыв, пожалуйста, <a asp-controller="Account" asp-action="Login">войдите</a> в систему.</div>
+            }
+
+            <div id="reviewsListContainer" class="mt-3">
+                @if (reviews.Any())
+                {
+                    <ul class="list-group mb-3">
+                        @foreach(var r in reviews)
+                        {
+                            <li class="list-group-item">
+                                <strong>@r.Title</strong>
+                                <div class="small text-muted">@r.Login — @r.CreatedAt — Рейтинг: @r.Rating</div>
+                                <p>@r.Text</p>
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <div class="alert alert-warning">Нет отзывов.</div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // reuse AJAX add to cart logic
+        document.querySelectorAll('.add-to-cart-form').forEach(function(f) {
+            f.addEventListener('submit', function(e){
+                e.preventDefault();
+                var btn = f.querySelector('button');
+                var orig = btn.textContent;
+                btn.disabled = true; btn.textContent = 'Добавление...';
+                fetch(f.action, { method: 'POST', body: new FormData(f), headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.success) {
+                        btn.textContent = 'Добавлено';
+                        var cartBtn = document.querySelector('.btn-cart');
+                        if (cartBtn && typeof data.cartCount !== 'undefined') cartBtn.textContent = 'Корзина ('+data.cartCount+')';
+                        setTimeout(()=>{ btn.textContent = orig; btn.disabled = false; }, 1600);
+                    } else if (data && data.redirect) {
+                        window.location = data.redirect;
+                    } else { btn.textContent = 'Ошибка'; setTimeout(()=>{ btn.textContent = orig; btn.disabled = false; }, 1200); }
+                }).catch(()=>{ btn.textContent = 'Ошибка'; setTimeout(()=>{ btn.textContent = orig; btn.disabled = false; }, 1200); });
+            });
+        });
+
+        // handle add review via AJAX and reload reviews
+        var addForm = document.getElementById('addReviewForm');
+        if (addForm) {
+            addForm.addEventListener('submit', function(e){
+                e.preventDefault();
+                var btn = document.getElementById('addReviewBtn');
+                btn.disabled = true; btn.textContent = 'Отправка...';
+                var fd = new FormData(addForm);
+                fetch('/Home/AddReview', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+                .then(r => r.json().catch(()=>null))
+                .then(data => {
+                    btn.disabled = false; btn.textContent = 'Отправить отзыв';
+                    if (data && data.success) {
+                        // reload reviews section
+                        loadReviewsAjax();
+                    } else if (data && data.errors) {
+                        alert(data.errors.join('\n'));
+                    } else {
+                        alert('Не удалось отправить отзыв');
+                    }
+                }).catch(()=>{ btn.disabled = false; btn.textContent = 'Отправить отзыв'; alert('Ошибка'); });
+            });
+        }
+
+        function loadReviewsAjax() {
+            fetch('/Home/GetProductReviews?productId=' + encodeURIComponent('@Model.ProductID'), { credentials: 'same-origin' })
+            .then(r => r.json()).then(data => {
+                var container = document.querySelector('#reviewsListContainer');
+                if (!container) return;
+                if (!data || !data.length) {
+                    container.innerHTML = '<div class="alert alert-warning">Нет отзывов.</div>';
+                    return;
+                }
+                // sort newest first by createdAt string (yyyy-MM-dd sorts lexicographically)
+                try { data.sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); }); } catch(e) { }
+                var html = '<ul class="list-group mb-3">';
+                data.forEach(function(rv){ html += '<li class="list-group-item"><strong>'+rv.title+'</strong><div class="small text-muted">'+rv.login+' — '+rv.createdAt+' — Рейтинг: '+rv.rating+'</div><p>'+rv.text+'</p></li>'; });
+                html += '</ul>';
+                container.innerHTML = html;
+            });
+        }
+    </script>
+}

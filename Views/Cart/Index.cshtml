@@ -1,0 +1,102 @@
+@model IEnumerable<Kursovoi.Models.ProductViewModel>
+@{
+    ViewData["Title"] = "Корзина";
+    var cart = ViewBag.CartItems as Dictionary<int,int> ?? new Dictionary<int,int>();
+    Func<decimal, string> FormatPrice = price => decimal.Truncate(price) == price ? $"{price:0} Br" : $"{price:0.##} Br";
+    Func<decimal, decimal, string> FormatEffective = (price, discount) => FormatPrice(price * (1 - discount / 100m));
+
+    decimal total = 0m;
+    var isAuth = User?.Identity?.IsAuthenticated == true;
+}
+
+<div class="store-hero text-center mb-4">
+    <h1 class="display-5">Ваша корзина</h1>
+</div>
+
+@if (Model == null || !Model.Any())
+{
+    <div class="alert alert-warning">Корзина пуста.</div>
+}
+else
+{
+    <div class="mb-3 d-flex justify-content-between">
+        <div>
+            <button id="proceedBtn" class="btn btn-sm btn-primary">Перейти к оформлению</button>
+        </div>
+        <form method="post" asp-controller="Cart" asp-action="Clear">
+            @Html.AntiForgeryToken()
+            <button class="btn btn-sm btn-outline-danger">Очистить корзину</button>
+        </form>
+    </div>
+
+    <div class="list-group">
+        @foreach(var p in Model)
+        {
+            var qty = cart.ContainsKey(p.ProductID) ? cart[p.ProductID] : 0;
+            var effective = p.Discount > 0 ? p.Price * (1 - p.Discount/100m) : p.Price;
+            total += effective * qty;
+
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <input type="checkbox" class="cart-select me-2" data-product-id="@p.ProductID" />
+                    <img src="@p.ImageUrl" alt="@p.ProductName" class="cart-item-img" />
+                    <div>
+                        <strong>@p.ProductName</strong>
+                        <div class="small text-muted">@p.ManufacturerName</div>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <div class="mb-1">
+                        <form method="post" asp-controller="Cart" asp-action="Update" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="productId" value="@p.ProductID" />
+                            <input type="number" name="quantity" value="@qty" min="0" style="width:70px;display:inline-block;" />
+                            <button class="btn btn-sm btn-outline-secondary">Обновить</button>
+                        </form>
+                    </div>
+                    <div>@(p.Discount>0 ? FormatEffective(p.Price,p.Discount) : FormatPrice(p.Price)) x @qty</div>
+                    <div class="mt-2">
+                        <form method="post" asp-controller="Cart" asp-action="Remove" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="productId" value="@p.ProductID" />
+                            <button class="btn btn-sm btn-outline-danger">Удалить</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="mt-3 text-end">
+        <h5>Сумма: <strong>@(total == 0 ? "0 Br" : (total % 1 == 0 ? $"{total:0} Br" : $"{total:0.##} Br"))</strong></h5>
+    </div>
+}
+
+<form id="checkoutForm" method="post" asp-controller="Cart" asp-action="Checkout">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="productIds" id="productIds" value="" />
+</form>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var proceedBtn = document.getElementById('proceedBtn');
+            var isAuth = @((isAuth) ? "true" : "false");
+            proceedBtn.addEventListener('click', function() {
+                var checked = Array.from(document.querySelectorAll('.cart-select:checked'));
+                if (checked.length === 0) { alert('Выберите товары для оформления.'); return; }
+                var ids = checked.map(function(cb){ return cb.getAttribute('data-product-id'); }).join(',');
+
+                if (!isAuth) {
+                    // redirect to login with returnUrl back to cart
+                    var url = '/Account/Login?returnUrl=' + encodeURIComponent(window.location.pathname + window.location.search);
+                    window.location = url;
+                    return;
+                }
+
+                document.getElementById('productIds').value = ids;
+                document.getElementById('checkoutForm').submit();
+            });
+        });
+    </script>
+}

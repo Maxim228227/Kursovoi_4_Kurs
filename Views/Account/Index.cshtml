@@ -1,0 +1,169 @@
+@model string
+@{
+    ViewData["Title"] = "Мой профиль";
+}
+
+@{ // render antiforgery token for AJAX
+    <text>@Html.AntiForgeryToken()</text>
+}
+
+<div class="store-hero text-center">
+    <h1 class="display-5">Мой профиль</h1>
+    <p class="lead">Добро пожаловать, @User.Identity.Name</p>
+</div>
+
+<div class="row">
+    <div class="col-md-3">
+        <div class="list-group" id="profileTabs" role="tablist">
+            <button class="list-group-item list-group-item-action active" data-bs-target="#purchases" data-bs-toggle="list" role="tab">Мои покупки</button>
+            <button class="list-group-item list-group-item-action" data-bs-target="#orders" data-bs-toggle="list" role="tab">Мои заказы</button>
+            <button class="list-group-item list-group-item-action" data-bs-target="#returns" data-bs-toggle="list" role="tab">Возврат</button>
+            <button class="list-group-item list-group-item-action" data-bs-target="#reviews" data-bs-toggle="list" role="tab">Мои комментарии и оценки</button>
+        </div>
+
+        <div class="mt-3">
+            <button id="deleteAccountBtn" class="btn btn-danger w-100">Удалить аккаунт</button>
+        </div>
+    </div>
+    <div class="col-md-9">
+        <div class="tab-content">
+            <div class="tab-pane fade show active" id="purchases" role="tabpanel">
+                <h5>Мои покупки</h5>
+                <div id="purchasesList">Загрузка...</div>
+            </div>
+            <div class="tab-pane fade" id="orders" role="tabpanel">
+                <h5>Мои заказы</h5>
+                <div id="ordersList">Загрузка...</div>
+            </div>
+            <div class="tab-pane fade" id="returns" role="tabpanel">
+                <h5>Возврат</h5>
+                <div id="returnsList">Загрузка...</div>
+            </div>
+            <div class="tab-pane fade" id="reviews" role="tabpanel">
+                <h5>Мои комментарии и оценки</h5>
+                <div id="reviewsList">Загрузка...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmDeleteModalLabel">Подтвердите удаление</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body">
+        Вы уверены, что хотите удалить свой аккаунт? Все данные будут помечены как неактивные.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" id="confirmDelete" class="btn btn-danger">Удалить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // load all lists initially
+            loadPurchases();
+            loadOrders();
+            loadReturns();
+            loadReviews();
+
+            // also load when tabs shown
+            var ordersTab = document.querySelector('[data-bs-target="#orders"]');
+            if (ordersTab) ordersTab.addEventListener('shown.bs.tab', function() { loadOrders(); });
+
+            var reviewsTab = document.querySelector('[data-bs-target="#reviews"]');
+            if (reviewsTab) reviewsTab.addEventListener('shown.bs.tab', function() { loadReviews(); });
+
+            var purchasesTab = document.querySelector('[data-bs-target="#purchases"]');
+            if (purchasesTab) purchasesTab.addEventListener('shown.bs.tab', function() { loadPurchases(); });
+
+            var returnsTab = document.querySelector('[data-bs-target="#returns"]');
+            if (returnsTab) returnsTab.addEventListener('shown.bs.tab', function() { loadReturns(); });
+
+            function loadOrders() {
+                fetch('/Account/GetOrders', { credentials: 'same-origin' }).then(r=>r.json()).then(data=>{
+                    var el = document.getElementById('ordersList');
+                    if (!data || !data.length) { el.innerHTML = '<div class="alert alert-warning">Нет заказов.</div>'; return; }
+                    var html = '<table class="table"><thead><tr><th>ID</th><th>Товар</th><th>Дата</th><th>Статус</th><th>Сумма</th></tr></thead><tbody>';
+                    // show orders with status indicating "in transit" (e.g. "Идет доставка", "в пути")
+                    data.filter(function(o){ var s=(o.status||'').toLowerCase(); return s.indexOf('идет')!==-1 || s.indexOf('в пути')!==-1; }).forEach(function(o){ html += '<tr><td>'+o.orderId+'</td><td><a href="/Home/Details?id='+o.productId+'">'+o.productId+'</a></td><td>'+o.createdAt+'</td><td>'+o.status+'</td><td>'+o.totalAmount+'</td></tr>'; });
+                    html += '</tbody></table>';
+                    el.innerHTML = html;
+                }).catch((err)=>{ console.error('loadOrders error', err); document.getElementById('ordersList').innerHTML = '<div class="alert alert-danger">Ошибка при загрузке заказов.</div>'; });
+            }
+
+            function loadPurchases() {
+                fetch('/Account/GetPurchases', { credentials: 'same-origin' }).then(r=>r.json()).then(data=>{
+                    var el = document.getElementById('purchasesList');
+                    if (!data || !data.length) { el.innerHTML = '<div class="alert alert-warning">Нет покупок.</div>'; return; }
+                    var html = '<ul class="list-group">';
+                    // show only delivered orders (status contains 'достав') and exclude 'Идет доставка' / 'в пути'
+                    data.filter(function(o){ var s=(o.status||'').toLowerCase(); return s.indexOf('достав')!==-1 && s.indexOf('идет')===-1 && s.indexOf('в пути')===-1; })
+                        .forEach(function(o){ html += '<li class="list-group-item">Заказ ' + o.orderId + ' — Товар: <a href="/Home/Details?id='+o.productId+'">'+o.productId+'</a> — '+o.createdAt+' — '+o.status+'</li>'; });
+                    html += '</ul>';
+                    el.innerHTML = html;
+                }).catch((err)=>{ console.error('loadPurchases error', err); document.getElementById('purchasesList').innerHTML = '<div class="alert alert-danger">Ошибка при загрузке покупок.</div>'; });
+            }
+
+            function loadReturns() {
+                fetch('/Account/GetReturns', { credentials: 'same-origin' }).then(r=>r.json()).then(data=>{
+                    var el = document.getElementById('returnsList');
+                    if (!data || !data.length) { el.innerHTML = '<div class="alert alert-warning">Нет возвратов.</div>'; return; }
+                    var html = '<div class="card"><div class="card-body"><h6>Запросы на возврат</h6><ul class="list-group">';
+                    // show cancelled orders (status contains 'отмен')
+                    data.filter(function(o){ var s=(o.status||'').toLowerCase(); return s.indexOf('отмен')!==-1; }).forEach(function(r){ html += '<li class="list-group-item">Заказ: <span>'+r.orderId+'</span> — Товар: <a href="/Home/Details?id='+r.productId+'">'+r.productId+'</a> — '+r.status+' — '+r.createdAt+'</li>'; });
+                    html += '</ul></div></div>';
+                    // CTA block for leaving an order
+                    html += '<div class="card mt-3"><div class="card-body"><h6>Оставить заказ</h6><p>Если вы хотите оставить новый заказ или отзыв, воспользуйтесь корзиной или перейдите на страницу товара.</p><a class="btn btn-primary" href="/Home/Index">Перейти в каталог</a></div></div>';
+                    el.innerHTML = html;
+                }).catch((err)=>{ console.error('loadReturns error', err); document.getElementById('returnsList').innerHTML = '<div class="alert alert-danger">Ошибка при загрузке возвратов.</div>'; });
+            }
+
+            function loadReviews() {
+                fetch('/Account/GetReviews', { credentials: 'same-origin' }).then(r=>r.json()).then(data=>{
+                    var el = document.getElementById('reviewsList');
+                    if (!data || !data.length) { el.innerHTML = '<div class="alert alert-warning">Нет отзывов.</div>'; return; }
+                    // sort by createdAt descending (newest first)
+                    try {
+                        data.sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
+                    } catch(e) { console.error('sort reviews error', e); }
+                    var html = '<ul class="list-group">';
+                    data.forEach(function(rv){ html += '<li class="list-group-item"><strong>'+rv.title+'</strong><p>'+rv.reviewText+'</p><div class="small text-muted">Рейтинг: '+rv.rating+' — Товар: <a href="/Home/Details?id='+rv.productId+'">'+rv.productId+'</a></div></li>'; });
+                    html += '</ul>';
+                    el.innerHTML = html;
+                }).catch((err)=>{ console.error('loadReviews error', err); document.getElementById('reviewsList').innerHTML = '<div class="alert alert-danger">Ошибка при загрузке отзывов.</div>'; });
+            }
+
+            var deleteBtn = document.getElementById('deleteAccountBtn');
+            var confirmBtn = document.getElementById('confirmDelete');
+            var deleteModal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
+            deleteBtn.addEventListener('click', function(){ deleteModal.show(); });
+            confirmBtn.addEventListener('click', function(){
+                confirmBtn.disabled = true; confirmBtn.textContent = 'Удаление...';
+                fetch('/Account/DeleteAccount', { method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest', 'RequestVerificationToken': getCsrfToken() } })
+                .then(r => r.json()).then(data => {
+                    if (data && data.success) {
+                        window.location = '/';
+                    } else {
+                        alert('Не удалось удалить аккаунт.');
+                        confirmBtn.disabled = false; confirmBtn.textContent = 'Удалить';
+                        deleteModal.hide();
+                    }
+                }).catch(()=>{ alert('Ошибка'); confirmBtn.disabled = false; confirmBtn.textContent = 'Удалить'; deleteModal.hide(); });
+            });
+
+            function getCsrfToken() {
+                var tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
+                return tokenEl ? tokenEl.value : '';
+            }
+        });
+    </script>
+}

@@ -31,19 +31,21 @@ body{font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetic
 .product-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:22px; margin-bottom:28px;}
 .card.store-card{background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; overflow:hidden; transition:transform .18s ease, box-shadow .18s ease;}
 .card.store-card:hover{transform:translateY(-6px); box-shadow:0 12px 30px rgba(16,24,40,0.08);}
-.card.store-card .card-img-top{height:180px; object-fit:contain; background:linear-gradient(180deg,#fff, #f7fbff); padding:18px;}
+/* Make card image area keep size but show full image without cropping */
+.card.store-card .card-img-top{height:160px; object-fit:contain; width:100%; display:block; padding:8px; background:#fff}
 .card.store-card .card-body{padding:16px;}
-.card.store-card .card-title{font-size:1.02rem; font-weight:700; margin-bottom:6px; color:#0b3d91}
-.card.store-card .card-text{font-size:.9rem; color:var(--muted); margin-bottom:8px;}
-.card.store-card .price{font-weight:800; color:var(--brand); font-size:1.05rem}
 
-.card-actions{display:flex; gap:8px; align-items:center;}
-.btn.btn-sm.primary{background:linear-gradient(90deg,var(--brand),var(--accent)); border-color:transparent; color:#fff}
-.btn.btn-outline-secondary{border-color:rgba(15,23,42,0.08); color:#0f172a}
+/* Cart item image styling */
+.list-group-item .cart-item-img{width:80px;height:auto;max-height:80px;object-fit:contain;border-radius:8px;margin-right:12px;flex-shrink:0;background:#fff}
 
-.badge.instock{background:linear-gradient(90deg,#e6fbf2,#dff7ec); color:#065f46; font-weight:700; padding:6px 8px; border-radius:8px}
-.badge.out{background:#fff5f5; color:#9b1c1c; padding:6px 8px; border-radius:8px}
+/* Ensure images inside card do not get conflicting sizing */
+.card.store-card img{display:block; width:100%;}
 
+/* small helpers */
+.text-muted-small{color:var(--muted); font-size:.85rem}
+
+/* Placeholder image sizing - keep capped */
+.card.store-card img{max-height:160px}
 /* Footer tweaks */
 footer.footer{padding:18px 0; margin-top:30px; background:transparent; color:#475569}
 footer.border-top{border-top:none !important; box-shadow:none !important;}
@@ -55,13 +57,14 @@ main[role="main"]{padding-bottom:110px}
 .auth-btn .auth-icon{width:20px; height:20px}
 .auth-btn:hover{background:var(--brand); color:#fff}
 
-/* Responsive */
-@media (max-width:768px){
-    .filters-row{flex-direction:column; align-items:stretch}
-}
+.badge.instock{background:linear-gradient(90deg,#e6fbf2,#dff7ec); color:#065f46; font-weight:700; padding:6px 8px; border-radius:8px}
+.badge.out{background:#fff5f5; color:#9b1c1c; padding:6px 8px; border-radius:8px}
+/* Cart count badge */
+.cart-count{min-width:26px; text-align:center; font-weight:700}
 
-/* small helpers */
-.text-muted-small{color:var(--muted); font-size:.85rem}
+/* Category link button style */
+.category-link{display:inline-block; margin:6px 4px}
 
-/* Placeholder image sizing */
-.card.store-card img{max-height:180px; width:100%;}
+/* Category link fills column so cards have equal height */
+.col-md-3 > .category-link{display:block;height:100%}
+.col-md-3 > .category-link .card{height:100%}
