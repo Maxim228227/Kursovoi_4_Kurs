@@ -1,0 +1,394 @@
+@model Kursovoi.Models.AdminPanelViewModel
+@{
+    ViewData["Title"] = "Admin Panel";
+}
+
+<h1>Панель администратора</h1>
+
+<ul class="nav nav-tabs" id="adminTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="products-tab" data-bs-toggle="tab" data-bs-target="#products" type="button" role="tab">Продукты</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="stores-tab" data-bs-toggle="tab" data-bs-target="#stores" type="button" role="tab">Магазины</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="users-tab" data-bs-toggle="tab" data-bs-target="#users" type="button" role="tab">Пользователи</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="reviews-tab" data-bs-toggle="tab" data-bs-target="#reviews" type="button" role="tab">Отзывы</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="orders-tab" data-bs-toggle="tab" data-bs-target="#orders" type="button" role="tab">Заказы</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="categories-tab" data-bs-toggle="tab" data-bs-target="#categories" type="button" role="tab">Категории</button>
+  </li>
+</ul>
+
+<div class="tab-content mt-3">
+  <div class="tab-pane fade show active" id="products" role="tabpanel">
+    <h3>Продукты</h3>
+    @* Hidden antiforgery token to be used by AJAX *@
+    <form id="afForm">@Html.AntiForgeryToken()</form>
+
+    <div class="mb-2 d-flex">
+        <input type="search" class="form-control admin-search me-2" data-target="#productsTable" placeholder="Поиск по продуктам..." />
+        <div class="ms-auto">Всего: <span id="productsCount">@Model.Products.Count</span></div>
+    </div>
+
+    <table id="productsTable" class="table table-striped table-admin">
+      <thead>
+        <tr>
+          <th class="sortable" data-type="number">ID</th>
+          <th class="sortable" data-type="text">Имя</th>
+          <th class="sortable" data-type="text">Категория</th>
+          <th class="sortable" data-type="text">Бренд</th>
+          <th class="sortable" data-type="number">Цена</th>
+          <th class="sortable" data-type="number">Кол-во</th>
+          <th class="sortable" data-type="text">Статус</th>
+          <th>Действие</th>
+        </tr>
+      </thead>
+      <tbody>
+      @foreach(var p in Model.Products)
+      {
+        <tr data-product-id="@p.ProductID">
+          <td>@p.ProductID</td>
+          <td><a href="@Url.Action("Details","Home", new { id = p.ProductID })">@p.ProductName</a></td>
+          <td>@p.CategoryName</td>
+          <td>@p.ManufacturerName</td>
+          <td>@p.Price</td>
+          <td>@p.Quantity</td>
+          <td class="prod-status">@(p.Status ? "Активен" : "Заморожен")</td>
+          <td>
+            <button class="btn btn-sm toggle-status-btn @(p.Status ? "btn-outline-danger" : "btn-outline-success")" data-product-id="@p.ProductID" data-new-status="@(p.Status ? "0" : "1")">@(p.Status ? "Заморозить" : "Активировать")</button>
+          </td>
+        </tr>
+      }
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tab-pane fade" id="stores" role="tabpanel">
+    <h3>Магазины</h3>
+
+    <div class="mb-2 d-flex">
+        <input type="search" class="form-control admin-search me-2" data-target="#storesTable" placeholder="Поиск по магазинам..." />
+        <div class="ms-auto">Всего: <span id="storesCount">@Model.Stores.Count</span></div>
+    </div>
+
+    <table id="storesTable" class="table table-striped table-admin">
+      <thead><tr>
+        <th class="sortable" data-type="number">ID</th>
+        <th class="sortable" data-type="text">Название</th>
+        <th class="sortable" data-type="text">Адрес</th>
+        <th class="sortable" data-type="text">Город</th>
+        <th class="sortable" data-type="text">Телефон</th>
+        <th class="sortable" data-type="text">Статус</th>
+        <th>Действие</th>
+      </tr></thead>
+      <tbody>
+      @foreach(var s in Model.Stores)
+      {
+        <tr data-store-id="@s.StoreID">
+          <td>@s.StoreID</td>
+          <td><a href="@Url.Action("Details","Stores", new { id = s.StoreID })">@s.StoreName</a></td>
+          <td>@s.Address</td>
+          <td>@s.City</td>
+          <td>@s.Phone</td>
+          <td class="store-status">@(s.Status ? "Активен" : "Заморожен")</td>
+          <td>
+            <button class="btn btn-sm toggle-store-status-btn @(s.Status ? "btn-outline-danger" : "btn-outline-success")" data-store-id="@s.StoreID" data-new-status="@(s.Status ? "0" : "1")">@(s.Status ? "Заморозить" : "Активировать")</button>
+          </td>
+        </tr>
+      }
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tab-pane fade" id="users" role="tabpanel">
+    <h3>Пользователи</h3>
+
+    <div class="mb-2 d-flex">
+        <input type="search" class="form-control admin-search me-2" data-target="#usersTable" placeholder="Поиск по пользователям..." />
+        <div class="ms-auto">Всего: <span id="usersCount">@Model.Users.Count</span></div>
+    </div>
+
+    <div class="mb-3">
+        <form id="addUserForm" class="row g-2">
+            <div class="col-auto"><input name="login" class="form-control" placeholder="Логин" required /></div>
+            <div class="col-auto"><input name="password" type="password" class="form-control" placeholder="Пароль" required /></div>
+            <div class="col-auto"><input name="phone" class="form-control" placeholder="Телефон" /></div>
+            <div class="col-auto"><input name="roleId" class="form-control" placeholder="RoleID (1-admin,2-user,3-seller)" /></div>
+            <div class="col-auto"><button id="addUserBtn" class="btn btn-primary">Добавить пользователя</button></div>
+            <div class="col-12"><small class="text-muted">Подсказка: Роль 1 - admin, Роль 2 - user, Роль 3 - seller</small></div>
+        </form>
+    </div>
+
+    <table id="usersTable" class="table table-striped table-admin">
+      <thead><tr>
+        <th class="sortable" data-type="number">ID</th>
+        <th class="sortable" data-type="text">Логин</th>
+        <th class="sortable" data-type="text">Роль</th>
+        <th class="sortable" data-type="text">Активен</th>
+        <th class="sortable" data-type="text">Телефон</th>
+        <th>Действие</th>
+      </tr></thead>
+      <tbody>
+      @foreach(var u in Model.Users)
+      {
+        <tr data-user-id="@u.UserID">
+          <td>@u.UserID</td>
+          <td>@u.Login</td>
+          <td>@u.RoleName</td>
+          <td class="user-active">@(u.IsActive ? "Да" : "Нет")</td>
+          <td>@u.Phone</td>
+          <td>
+            <button class="btn btn-sm toggle-user-active-btn @(u.IsActive ? "btn-outline-danger" : "btn-outline-success")" data-user-id="@u.UserID" data-new-status="@(u.IsActive ? "0" : "1")">@(u.IsActive ? "Блокировать" : "Разблокировать")</button>
+          </td>
+        </tr>
+      }
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tab-pane fade" id="reviews" role="tabpanel">
+    <h3>Отзывы</h3>
+
+    <div class="mb-2 d-flex">
+        <input type="search" class="form-control admin-search me-2" data-target="#reviewsTable" placeholder="Поиск по отзывам..." />
+        <div class="ms-auto">Всего: <span id="reviewsCount">@Model.Reviews.Count</span></div>
+    </div>
+
+    <table id="reviewsTable" class="table table-striped table-admin">
+      <thead><tr>
+        <th class="sortable" data-type="number">ID</th>
+        <th class="sortable" data-type="text">Пользователь</th>
+        <th class="sortable" data-type="text">Товар</th>
+        <th class="sortable" data-type="text">Заголовок</th>
+        <th class="sortable" data-type="number">Рейтинг</th>
+        <th class="sortable" data-type="text">Дата</th>
+      </tr></thead>
+      <tbody>
+      @foreach(var r in Model.Reviews)
+      {
+        <tr>
+          <td>@r.ReviewId</td>
+          <td>@r.Login (@r.UserId)</td>
+          <td>@r.Title</td>
+          <td>@r.Text</td>
+          <td>@r.Rating</td>
+          <td>@r.CreatedAt</td>
+        </tr>
+      }
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tab-pane fade" id="orders" role="tabpanel">
+    <h3>Заказы</h3>
+
+    <div class="mb-2 d-flex">
+        <input type="search" class="form-control admin-search me-2" data-target="#ordersTable" placeholder="Поиск по заказам..." />
+        <div class="ms-auto">Всего: <span id="ordersCount">@Model.Orders.Count</span></div>
+    </div>
+
+    <table id="ordersTable" class="table table-striped table-admin">
+      <thead><tr>
+        <th class="sortable" data-type="number">ID</th>
+        <th class="sortable" data-type="number">ТоварID</th>
+        <th class="sortable" data-type="text">Дата</th>
+        <th class="sortable" data-type="text">Статус</th>
+        <th class="sortable" data-type="number">Сумма</th>
+      </tr></thead>
+      <tbody>
+      @foreach(var o in Model.Orders)
+      {
+        <tr>
+          <td>@o.OrderId</td>
+          <td>@o.ProductId</td>
+          <td>@o.CreatedAt</td>
+          <td>@o.Status</td>
+          <td>@o.TotalAmount</td>
+        </tr>
+      }
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tab-pane fade" id="categories" role="tabpanel">
+    <h3>Категории</h3>
+
+    <div class="mb-2 d-flex">
+        <input type="search" class="form-control admin-search me-2" data-target="#categoriesTable" placeholder="Поиск по категориям..." />
+        <div class="ms-auto">Всего: <span id="categoriesCount">@Model.Categories.Count</span></div>
+    </div>
+
+    <table id="categoriesTable" class="table table-striped table-admin">
+      <thead><tr>
+        <th class="sortable" data-type="number">#</th>
+        <th class="sortable" data-type="text">Название</th>
+      </tr></thead>
+      <tbody>
+      @{ int idx = 0; }
+      @foreach(var c in Model.Categories)
+      {
+        idx++;
+        <tr>
+          <td>@idx</td>
+          <td>@c.CategoryName</td>
+        </tr>
+      }
+      </tbody>
+    </table>
+  </div>
+</div>
+
+@section Scripts {
+<script>
+    document.addEventListener('DOMContentLoaded', function(){
+        var tokenInput = document.querySelector('#afForm input[name="__RequestVerificationToken"]');
+        var token = tokenInput ? tokenInput.value : null;
+
+        function attachToggleHandlers(root) {
+            root.querySelectorAll('.toggle-status-btn').forEach(function(btn){
+                if (btn._attached) return;
+                btn._attached = true;
+                btn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    var productId = btn.getAttribute('data-product-id');
+                    var newStatus = btn.getAttribute('data-new-status');
+                    if (!productId) return;
+                    var fd = new URLSearchParams();
+                    fd.append('productId', productId);
+                    fd.append('status', newStatus);
+                    if (token) fd.append('__RequestVerificationToken', token);
+                    fetch('/Admin/SetProductStatus', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: fd.toString(),
+                        credentials: 'same-origin'
+                    }).then(function(r){ return r.json(); }).then(function(data){
+                        if (data && data.success) {
+                            var row = document.querySelector('tr[data-product-id="' + productId + '"]');
+                            if (!row) return;
+                            var statusCell = row.querySelector('.prod-status');
+                            var btnEl = row.querySelector('.toggle-status-btn');
+                            var isNowActive = (newStatus === '1');
+                            statusCell.textContent = isNowActive ? 'Активен' : 'Заморожен';
+                            btnEl.textContent = isNowActive ? 'Заморозить' : 'Активировать';
+                            btnEl.classList.toggle('btn-outline-danger', isNowActive);
+                            btnEl.classList.toggle('btn-outline-success', !isNowActive);
+                            btnEl.setAttribute('data-new-status', isNowActive ? '0' : '1');
+                        } else { alert('Ошибка: ' + (data && data.message ? data.message : 'не удалось обновить статус')); }
+                    }).catch(function(err){ alert('Ошибка запроса'); });
+                });
+            });
+        }
+        attachToggleHandlers(document);
+
+        function attachStoreToggleHandlers(root) {
+            root.querySelectorAll('.toggle-store-status-btn').forEach(function(btn){
+                if (btn._attachedStore) return;
+                btn._attachedStore = true;
+                btn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    var storeId = btn.getAttribute('data-store-id');
+                    var newStatus = btn.getAttribute('data-new-status');
+                    if (!storeId) return;
+                    var fd = new URLSearchParams();
+                    fd.append('storeId', storeId);
+                    fd.append('status', newStatus);
+                    if (token) fd.append('__RequestVerificationToken', token);
+                    fetch('/Admin/SetStoreStatus', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: fd.toString(),
+                        credentials: 'same-origin'
+                    }).then(function(r){ return r.json(); }).then(function(data){
+                        if (data && data.success) {
+                            var row = document.querySelector('tr[data-store-id="' + storeId + '"]');
+                            if (!row) return;
+                            var statusCell = row.querySelector('.store-status');
+                            var btnEl = row.querySelector('.toggle-store-status-btn');
+                            var isNowActive = (newStatus === '1');
+                            statusCell.textContent = isNowActive ? 'Активен' : 'Заморожен';
+                            btnEl.textContent = isNowActive ? 'Заморозить' : 'Активировать';
+                            btnEl.classList.toggle('btn-outline-danger', isNowActive);
+                            btnEl.classList.toggle('btn-outline-success', !isNowActive);
+                            btnEl.setAttribute('data-new-status', isNowActive ? '0' : '1');
+                        } else { alert('Ошибка: ' + (data && data.message ? data.message : 'не удалось обновить статус')); }
+                    }).catch(function(err){ alert('Ошибка запроса'); });
+                });
+            });
+        }
+        attachStoreToggleHandlers(document);
+
+        function attachUserToggleHandlers(root){
+            root.querySelectorAll('.toggle-user-active-btn').forEach(function(btn){
+                if (btn._attachedUser) return; btn._attachedUser = true;
+                btn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    var userId = btn.getAttribute('data-user-id');
+                    var newStatus = btn.getAttribute('data-new-status');
+                    if (!userId) return;
+                    var fd = new URLSearchParams(); fd.append('userId', userId); fd.append('status', newStatus); if (token) fd.append('__RequestVerificationToken', token);
+                    fetch('/Admin/SetUserActive', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: fd.toString(), credentials: 'same-origin' }).then(function(r){ return r.json(); }).then(function(data){
+                        if (data && data.success) { var row = document.querySelector('tr[data-user-id="' + userId + '"]'); if (!row) return; var cell = row.querySelector('.user-active'); var btnEl = row.querySelector('.toggle-user-active-btn'); var isNowActive = (newStatus === '1'); cell.textContent = isNowActive ? 'Да' : 'Нет'; btnEl.textContent = isNowActive ? 'Блокировать' : 'Разблокировать'; btnEl.classList.toggle('btn-outline-danger', isNowActive); btnEl.classList.toggle('btn-outline-success', !isNowActive); btnEl.setAttribute('data-new-status', isNowActive ? '0' : '1'); } else { alert('Ошибка: ' + (data && data.message ? data.message : 'не удалось обновить статус')); }
+                    }).catch(function(){ alert('Ошибка запроса'); });
+                });
+            });
+        }
+        attachUserToggleHandlers(document);
+
+        // add user
+        document.getElementById('addUserForm').addEventListener('submit', function(e){
+            e.preventDefault();
+            var form = e.target; var login = form.login.value; var password = form.password.value; var phone = form.phone.value; var roleId = form.roleId.value || '2';
+            var fd = new URLSearchParams(); fd.append('login', login); fd.append('password', password); fd.append('phone', phone); fd.append('roleId', roleId); if (token) fd.append('__RequestVerificationToken', token);
+            fetch('/Admin/AddUser', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: fd.toString(), credentials: 'same-origin' }).then(function(r){ return r.json(); }).then(function(data){ if (data && data.success) { alert('Пользователь добавлен'); location.reload(); } else { alert('Ошибка: ' + (data && data.message ? data.message : 'не удалось добавить пользователя')); } }).catch(function(){ alert('Ошибка запроса'); });
+        });
+
+        // Search/filter for tables
+        function filterTable(table, query) {
+            query = (query || '').trim().toLowerCase();
+            var rows = table.tBodies[0].rows;
+            var visible = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var r = rows[i];
+                var text = r.textContent.trim().toLowerCase();
+                if (text.indexOf(query) !== -1) { r.style.display = ''; visible++; }
+                else { r.style.display = 'none'; }
+            }
+            return visible;
+        }
+
+        document.querySelectorAll('.admin-search').forEach(function(inp){
+            inp.addEventListener('input', function(e){
+                var target = document.querySelector(inp.getAttribute('data-target'));
+                if (!target) return;
+                var visible = filterTable(target, inp.value);
+                var el = document.getElementById(target.id.replace('Table','Count'));
+                if (el) el.textContent = visible;
+            });
+        });
+
+        // Sorting
+        function sortTable(table, colIndex, type, asc) {
+            var tbody = table.tBodies[0];
+            var rows = Array.from(tbody.rows);
+            var comparer;
+            if (type === 'number') {
+                comparer = function(a,b){ var va = parseFloat(a.cells[colIndex].textContent.replace(/[^0-9.,-]/g, '')) || 0; var vb = parseFloat(b.cells[colIndex].textContent.replace(/[^0-9.,-]/g, '')) || 0; return va - vb; };
+            } else if (type === 'date') { comparer = function(a,b){ var da = Date.parse(a.cells[colIndex].textContent) || 0; var db = Date.parse(b.cells[colIndex].textContent) || 0; return da - db; };
+            } else { comparer = function(a,b){ var sa = a.cells[colIndex].textContent.trim().toLowerCase(); var sb = b.cells[colIndex].textContent.trim().toLowerCase(); if (sa < sb) return -1; if (sa > sb) return 1; return 0; }; }
+            rows.sort(function(a,b){ return asc ? comparer(a,b) : -comparer(a,b); });
+            rows.forEach(function(r){ tbody.appendChild(r); });
+        }
+
+        document.querySelectorAll('table.table-admin thead th.sortable').forEach(function(th, idx){ th.style.cursor = 'pointer'; th._asc = true; th.addEventListener('click', function(e){ var table = th.closest('table'); var headers = Array.from(th.parentElement.children); var colIndex = headers.indexOf(th); var type = th.getAttribute('data-type') || 'text'; sortTable(table, colIndex, type, th._asc); th._asc = !th._asc; }); });
+
+    });
+</script>
+}

@@ -20,7 +20,13 @@ namespace Kursovoi.Controllers
                     foreach (var line in lines)
                     {
                         var parts = line.Split('|');
-                        if (parts.Length < 6) continue;
+                        if (parts.Length < 7) continue; // expect status at index 6
+
+                        bool status = false;
+                        if (parts.Length > 6) bool.TryParse(parts[6], out status);
+
+                        // status == true means ACTIVE in DB; only show active stores to customers
+                        if (!status) continue;
 
                         var vm = new StoreViewModel
                         {
@@ -29,7 +35,8 @@ namespace Kursovoi.Controllers
                             Address = parts[2],
                             City = parts[3],
                             Phone = parts[4],
-                            LegalPerson = parts[5]
+                            LegalPerson = parts[5],
+                            Status = status
                         };
                         list.Add(vm);
                     }
@@ -54,7 +61,7 @@ namespace Kursovoi.Controllers
 
         public IActionResult Details(int id)
         {
-            // find store name by id
+            // find store name by id and ensure store is active
             string storeName = null;
             try
             {
@@ -68,6 +75,9 @@ namespace Kursovoi.Controllers
                         if (parts.Length < 2) continue;
                         if (int.TryParse(parts[0], out var sid) && sid == id)
                         {
+                            bool status = true;
+                            if (parts.Length > 6) bool.TryParse(parts[6], out status);
+                            if (!status) { storeName = null; break; } // store is frozen
                             storeName = parts[1];
                             break;
                         }
@@ -84,7 +94,7 @@ namespace Kursovoi.Controllers
                 return NotFound();
             }
 
-            // fetch all products and filter by store name
+            // fetch all products and filter by store name and only active products
             var products = new List<ProductViewModel>();
             try
             {
@@ -95,9 +105,14 @@ namespace Kursovoi.Controllers
                     foreach (var line in lines)
                     {
                         var parts = line.Split('|');
-                        if (parts.Length < 17) continue;
+                        // expect at least 19 parts including product status at index 18
+                        if (parts.Length < 19) continue;
                         try
                         {
+                            var isProductActive = true;
+                            bool.TryParse(parts[18], out isProductActive);
+                            if (!isProductActive) continue; // skip frozen products
+
                             var rawImagePath = parts[16];
                             var fileName = Path.GetFileName(rawImagePath ?? string.Empty);
                             var physicalPath = Path.Combine(Directory.GetCurrentDirectory(), "Images", fileName ?? string.Empty);
@@ -119,7 +134,7 @@ namespace Kursovoi.Controllers
                                 ManufacturerName = parts[3],
                                 Country = parts[4],
                                 Description = parts[5],
-                                IsActive = bool.Parse(parts[6]),
+                                IsActive = bool.TryParse(parts[6], out var ia) && ia,
                                 CreatedAt = DateTime.TryParse(parts[7], CultureInfo.InvariantCulture, DateTimeStyles.None, out var cAt) ? cAt : DateTime.MinValue,
                                 UpdatedAt = DateTime.TryParse(parts[8], CultureInfo.InvariantCulture, DateTimeStyles.None, out var uAt) ? uAt : DateTime.MinValue,
                                 StoreName = parts[9],

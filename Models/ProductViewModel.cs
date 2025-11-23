@@ -22,5 +22,7 @@ namespace Kursovoi.Models
         public int Quantity { get; set; }
         public string ImageUrl { get; set; } = string.Empty;
         public int StoreID { get; set; }
+        // Status column: true = frozen, false = active
+        public bool Status { get; set; }
     }
 }

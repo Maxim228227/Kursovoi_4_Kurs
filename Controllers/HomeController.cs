@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace Kursovoi.Controllers
 {
@@ -10,16 +11,30 @@ namespace Kursovoi.Controllers
     {
         [HttpGet]
         [ActionName("Index")]
-        public IActionResult IndexGet(string q = null, string cat = null, string brand = null, string min = null, string max = null, string instock = null, string sort = null)
+        public IActionResult IndexGet(string q = null, string[] cat = null, string[] brand = null, string min = null, string max = null, string instock = null, string sort = null)
         {
-            var list = GetProductsFromServer();
+            // get the full, unfiltered product list (used to populate filter dropdowns)
+            var allProducts = GetProductsFromServer();
+            var list = allProducts.ToList();
+
+            // expose the full list to the view so filter controls always show all parameters
+            ViewBag.AllProducts = allProducts;
 
             // helper to compute effective price after discount
             decimal EffectivePrice(ProductViewModel p) => p.Price * (1 - (p.Discount / 100m));
 
+            // normalize incoming string filters
+            q = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
+            if (cat != null && cat.Length == 0) cat = null;
+            if (brand != null && brand.Length == 0) brand = null;
+            min = string.IsNullOrWhiteSpace(min) ? null : min.Trim();
+            max = string.IsNullOrWhiteSpace(max) ? null : max.Trim();
+            instock = string.IsNullOrWhiteSpace(instock) ? null : instock.Trim().ToLowerInvariant();
+            sort = string.IsNullOrWhiteSpace(sort) ? null : sort.Trim();
+
             if (!string.IsNullOrWhiteSpace(q))
             {
-                var qq = q.Trim();
+                var qq = q;
                 list = list.Where(p =>
                     (p.ProductName ?? string.Empty).Contains(qq, StringComparison.OrdinalIgnoreCase)
                     || (p.Description ?? string.Empty).Contains(qq, StringComparison.OrdinalIgnoreCase)
@@ -29,27 +44,54 @@ namespace Kursovoi.Controllers
                 ViewBag.SearchQuery = q;
             }
 
-            if (!string.IsNullOrWhiteSpace(cat))
+            if (cat != null && cat.Length > 0)
             {
-                list = list.Where(p => string.Equals(p.CategoryName ?? string.Empty, cat.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+                var trimmed = cat.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).ToArray();
+                if (trimmed.Length > 0)
+                {
+                    list = list.Where(p => trimmed.Any(tc => string.Equals((p.CategoryName ?? string.Empty).Trim(), tc, StringComparison.OrdinalIgnoreCase))).ToList();
+                }
             }
 
-            if (!string.IsNullOrWhiteSpace(brand))
+            if (brand != null && brand.Length > 0)
             {
-                list = list.Where(p => string.Equals(p.ManufacturerName ?? string.Empty, brand.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+                var trimmed = brand.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).ToArray();
+                if (trimmed.Length > 0)
+                {
+                    list = list.Where(p => trimmed.Any(tb => string.Equals((p.ManufacturerName ?? string.Empty).Trim(), tb, StringComparison.OrdinalIgnoreCase))).ToList();
+                }
             }
 
-            if (!string.IsNullOrWhiteSpace(min) && decimal.TryParse(min, NumberStyles.Any, CultureInfo.InvariantCulture, out var minVal))
+            // helper to parse decimals from various cultures/user input
+            static bool TryParseDecimalFlexible(string s, out decimal result)
+            {
+                result = 0m;
+                if (string.IsNullOrWhiteSpace(s)) return false;
+                s = s.Trim();
+                // try invariant first (expects dot)
+                if (decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out result)) return true;
+                // try current culture (may accept comma)
+                if (decimal.TryParse(s, NumberStyles.Any, CultureInfo.CurrentCulture, out result)) return true;
+                // replace comma with dot and try invariant again
+                var s2 = s.Replace(',', '.');
+                if (decimal.TryParse(s2, NumberStyles.Any, CultureInfo.InvariantCulture, out result)) return true;
+                // replace dot with comma and try current culture
+                var s3 = s.Replace('.', ',');
+                if (decimal.TryParse(s3, NumberStyles.Any, CultureInfo.CurrentCulture, out result)) return true;
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(min) && TryParseDecimalFlexible(min, out var minVal))
             {
                 list = list.Where(p => EffectivePrice(p) >= minVal).ToList();
             }
 
-            if (!string.IsNullOrWhiteSpace(max) && decimal.TryParse(max, NumberStyles.Any, CultureInfo.InvariantCulture, out var maxVal))
+            if (!string.IsNullOrWhiteSpace(max) && TryParseDecimalFlexible(max, out var maxVal))
             {
                 list = list.Where(p => EffectivePrice(p) <= maxVal).ToList();
             }
 
-            if (!string.IsNullOrWhiteSpace(instock) && instock == "on")
+            if (!string.IsNullOrWhiteSpace(instock) && (instock == "on" || instock == "true" || instock == "1"))
             {
                 list = list.Where(p => p.Quantity > 0).ToList();
             }
@@ -65,10 +107,10 @@ namespace Kursovoi.Controllers
                         list = list.OrderByDescending(p => EffectivePrice(p)).ToList();
                         break;
                     case "name_asc":
-                        list = list.OrderBy(p => p.ProductName).ToList();
+                        list = list.OrderBy(p => p.ProductName ?? string.Empty, StringComparer.OrdinalIgnoreCase).ToList();
                         break;
                     case "name_desc":
-                        list = list.OrderByDescending(p => p.ProductName).ToList();
+                        list = list.OrderByDescending(p => p.ProductName ?? string.Empty, StringComparer.OrdinalIgnoreCase).ToList();
                         break;
                     case "rating_desc":
                         // rating unavailable; fallback to quantity desc
@@ -311,9 +353,16 @@ namespace Kursovoi.Controllers
                             Discount = decimal.TryParse(parts[14], NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : 0m,
                             Quantity = int.TryParse(parts[15], out var qn) ? qn : 0,
                             ImageUrl = imageUrl,
-                            StoreID = int.TryParse(parts[17], out var sid) ? sid : 0
+                            StoreID = int.TryParse(parts[17], out var sid) ? sid : 0,
+                            // Status: if present (server may return an extra column), treat "1" or "true" as ACTIVE
+                            Status = (parts.Length > 18) && (parts[18] == "1" || parts[18].Equals("true", System.StringComparison.OrdinalIgnoreCase))
                         };
-                        list.Add(vm);
+
+                        // only expose ACTIVE products in public lists (Status == true means active)
+                        if (vm.Status)
+                        {
+                            list.Add(vm);
+                        }
                     }
                     catch
                     {

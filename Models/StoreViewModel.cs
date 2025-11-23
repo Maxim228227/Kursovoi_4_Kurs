@@ -8,5 +8,7 @@ namespace Kursovoi.Models
         public string City { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
         public string LegalPerson { get; set; } = string.Empty;
+        // Status: true = active, false = frozen
+        public bool Status { get; set; }
     }
 }

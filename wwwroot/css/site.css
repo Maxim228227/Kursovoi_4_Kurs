@@ -27,6 +27,10 @@ body{font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetic
 .btn-filter{background:transparent; border:1px solid var(--brand); color:var(--brand); font-weight:700; border-radius:6px; padding:6px 10px}
 .btn-filter:hover{background:var(--brand); color:#fff}
 
+/* Ensure filter controls and buttons are above any overlapping elements so full area is clickable */
+.filters-row, .filters-row * { position: relative; z-index: 1; }
+.filter-buttons .btn { z-index: 2; position: relative; min-width: 120px; }
+
 /* Product grid */
 .product-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:22px; margin-bottom:28px;}
 .card.store-card{background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; overflow:hidden; transition:transform .18s ease, box-shadow .18s ease;}

@@ -5,6 +5,7 @@ using System.Text;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Kursovoi.Controllers
 {
@@ -96,68 +97,94 @@ namespace Kursovoi.Controllers
             }
             catch
             {
-                ModelState.AddModelError(string.Empty, "Сервер недоступен");
+                ModelState.AddModelError(string.Empty, "Ошибка соединения");
                 return View(model);
             }
 
-            if (!string.IsNullOrEmpty(response) && response.Trim().ToUpper() == "OK")
+            if (string.IsNullOrEmpty(response))
             {
-                // sign in with cookie authentication
-                var claims = new List<Claim>
-                {
-                    new Claim(ClaimTypes.Name, model.Login)
-                };
-                var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-                var principal = new ClaimsPrincipal(identity);
-                await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
-
-                // After sign-in, fetch basket count and store in session
-                try
-                {
-                    var resp = Models.UdpClientHelper.SendUdpMessage("getusers");
-                    int userId = 0;
-                    if (!string.IsNullOrEmpty(resp))
-                    {
-                        var lines = resp.Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries);
-                        foreach (var line in lines)
-                        {
-                            var parts = line.Split('|');
-                            if (parts.Length < 2) continue;
-                            if (string.Equals(parts[1].Trim(), model.Login, StringComparison.OrdinalIgnoreCase) && int.TryParse(parts[0], out var id))
-                            {
-                                userId = id; break;
-                            }
-                        }
-                    }
-
-                    if (userId > 0)
-                    {
-                        var basketResp = Models.UdpClientHelper.SendUdpMessage($"getbasket|{userId}");
-                        var cnt = 0;
-                        if (!string.IsNullOrEmpty(basketResp))
-                        {
-                            var bl = basketResp.Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries);
-                            foreach (var l in bl)
-                            {
-                                var ps = l.Split('|');
-                                if (ps.Length>=2 && int.TryParse(ps[1], out var q)) cnt += q;
-                            }
-                        }
-                        HttpContext.Session.SetInt32("cartCount", cnt);
-                    }
-                }
-                catch
-                {
-                    // ignore
-                }
-
-                TempData["AuthMessage"] = "Вы успешно вошли";
-                if (!string.IsNullOrEmpty(returnUrl)) return Redirect(returnUrl);
-                return RedirectToAction("Index", "Home");
+                ModelState.AddModelError(string.Empty, "Ошибка авторизации");
+                return View(model);
             }
 
-            ModelState.AddModelError(string.Empty, "Неправильный логин или пароль");
-            return View(model);
+            response = response.Trim();
+
+            // If server returned an ERROR|... string, display message
+            if (response.StartsWith("ERROR|", System.StringComparison.OrdinalIgnoreCase))
+            {
+                ModelState.AddModelError(string.Empty, response.Substring(6));
+                return View(model);
+            }
+
+            // If server returned FAIL => invalid credentials
+            if (string.Equals(response, "FAIL", System.StringComparison.OrdinalIgnoreCase))
+            {
+                ModelState.AddModelError(string.Empty, "Неправильный логин или пароль");
+                return View(model);
+            }
+
+            // Otherwise treat response as role name (e.g. "admin" or "user")
+            var roleName = response; // not null/empty here
+
+            // sign in with cookie authentication and include role claim
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.Name, model.Login),
+                new Claim(ClaimTypes.Role, roleName)
+            };
+            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var principal = new ClaimsPrincipal(identity);
+            await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+
+            // After sign-in, fetch basket count and store in session
+            try
+            {
+                var resp = Models.UdpClientHelper.SendUdpMessage("getusers");
+                int userId = 0;
+                if (!string.IsNullOrEmpty(resp))
+                {
+                    var lines = resp.Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var line in lines)
+                    {
+                        var parts = line.Split('|');
+                        if (parts.Length < 2) continue;
+                        if (string.Equals(parts[1].Trim(), model.Login, StringComparison.OrdinalIgnoreCase) && int.TryParse(parts[0], out var id))
+                        {
+                            userId = id; break;
+                        }
+                    }
+                }
+
+                if (userId > 0)
+                {
+                    var basketResp = Models.UdpClientHelper.SendUdpMessage($"getbasket|{userId}");
+                    var cnt = 0;
+                    if (!string.IsNullOrEmpty(basketResp))
+                    {
+                        var bl = basketResp.Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries);
+                        foreach (var l in bl)
+                        {
+                            var ps = l.Split('|');
+                            if (ps.Length>=2 && int.TryParse(ps[1], out var q)) cnt += q;
+                        }
+                    }
+                    HttpContext.Session.SetInt32("cartCount", cnt);
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            // If admin, redirect to admin panel
+            if (string.Equals(roleName, "admin", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return RedirectToAction("Index", "Admin");
+            }
+
+            // don't set TempData message on successful login
+            if (!string.IsNullOrEmpty(returnUrl)) return Redirect(returnUrl);
+            return RedirectToAction("Index", "Home");
         }
 
         [HttpGet]
@@ -187,17 +214,17 @@ namespace Kursovoi.Controllers
             }
             catch
             {
-                ModelState.AddModelError(string.Empty, "Сервер недоступен");
+                ModelState.AddModelError(string.Empty, "Ошибка соединения");
                 return View(model);
             }
 
             if (!string.IsNullOrEmpty(response) && response.Trim().ToUpper() == "OK")
             {
-                TempData["AuthMessage"] = "Регистрация прошла успешно. Войдите в систему.";
+                TempData["AuthMessage"] = "Пользователь успешно создан. Войдите в систему.";
                 return RedirectToAction("Login");
             }
 
-            ModelState.AddModelError(string.Empty, "Не удалось зарегистрироваться");
+            ModelState.AddModelError(string.Empty, "Не удалось зарегистрировать");
             return View(model);
         }
 
@@ -205,7 +232,7 @@ namespace Kursovoi.Controllers
         public async System.Threading.Tasks.Task<IActionResult> Logout()
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            TempData["AuthMessage"] = "Вы вышли из системы.";
+            TempData["AuthMessage"] = "Выход выполнен.";
             HttpContext.Session.SetInt32("cartCount", 0);
             return RedirectToAction("Index", "Home");
         }
@@ -281,7 +308,7 @@ namespace Kursovoi.Controllers
                     var p = l.Split('|');
                     if (p.Length < 5) continue;
                     var status = p[3] ?? string.Empty;
-                    if (status.IndexOf("отмен", StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (status.IndexOf("отмена", System.StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         // orderId|productId|createdAt|status|totalAmount|payment|address|storeId
                         list.Add(new { returnId = p[0], orderId = p[0], productId = p[1], status = p[3], createdAt = p[2] });
