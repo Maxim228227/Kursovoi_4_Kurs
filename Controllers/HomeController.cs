@@ -4,6 +4,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using System.Net;
+using System.Text.RegularExpressions;
 
 namespace Kursovoi.Controllers
 {
@@ -305,7 +307,8 @@ namespace Kursovoi.Controllers
             return 0;
         }
 
-        private List<ProductViewModel> GetProductsFromServer()
+        // New overloaded GetProductsFromServer that can include inactive products when requested (admin)
+        private List<ProductViewModel> GetProductsFromServer(bool includeInactive)
         {
             var list = new List<ProductViewModel>();
             try
@@ -358,8 +361,8 @@ namespace Kursovoi.Controllers
                             Status = (parts.Length > 18) && (parts[18] == "1" || parts[18].Equals("true", System.StringComparison.OrdinalIgnoreCase))
                         };
 
-                        // only expose ACTIVE products in public lists (Status == true means active)
-                        if (vm.Status)
+                        // only expose ACTIVE products in public lists unless includeInactive is true
+                        if (vm.Status || includeInactive)
                         {
                             list.Add(vm);
                         }
@@ -378,10 +381,76 @@ namespace Kursovoi.Controllers
             return list;
         }
 
+        // existing parameterless wrapper keeps behavior for public views
+        private List<ProductViewModel> GetProductsFromServer()
+        {
+            return GetProductsFromServer(false);
+        }
+
         public IActionResult ProductsFromServer()
         {
             var list = GetProductsFromServer();
             return View(list);
+        }
+
+        [HttpGet("Home/CategoryProducts/{*category}")]
+        public IActionResult CategoryProductsPath(string category)
+        {
+            return CategoryProducts(category);
+        }
+
+        public IActionResult CategoryProducts(string category)
+        {
+            // Admins should see inactive products too
+            var includeInactive = User?.Identity?.IsAuthenticated == true && User.IsInRole("admin");
+            var all = GetProductsFromServer(includeInactive);
+
+            // normalize incoming category: handle url encoding and trim
+            if (!string.IsNullOrEmpty(category))
+            {
+                try { category = WebUtility.UrlDecode(category).Trim(); } catch { category = category.Trim(); }
+            }
+
+            ViewBag.Category = category ?? string.Empty;
+
+            // prepare diagnostics
+            ViewBag.AllCount = all.Count;
+            ViewBag.AllCategories = all.Select(p => (p.CategoryName ?? string.Empty).Trim()).Where(s => !string.IsNullOrEmpty(s)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList();
+
+            if (string.IsNullOrWhiteSpace(category))
+            {
+                ViewBag.FilteredCount = 0;
+                return View("CategoryProducts", new List<ProductViewModel>());
+            }
+
+            string Normalize(string s)
+            {
+                if (string.IsNullOrEmpty(s)) return string.Empty;
+                var t = s.Replace('\u00A0', ' ');
+                t = Regex.Replace(t, "\\s+", " ").Trim();
+                return t.ToLowerInvariant();
+            }
+
+            var catNorm = Normalize(category);
+
+            // 1) try exact normalized equality
+            var filtered = all.Where(p => Normalize(p.CategoryName) == catNorm).ToList();
+
+            // 2) if none, try normalized contains
+            if (filtered.Count == 0)
+            {
+                filtered = all.Where(p => Normalize(p.CategoryName).Contains(catNorm)).ToList();
+            }
+
+            // 3) if still none, try simple case-insensitive contains on original names
+            if (filtered.Count == 0)
+            {
+                filtered = all.Where(p => !string.IsNullOrEmpty(p.CategoryName) && p.CategoryName.IndexOf(category, System.StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            }
+
+            ViewBag.FilteredCount = filtered.Count;
+
+            return View("CategoryProducts", filtered);
         }
     }
 }

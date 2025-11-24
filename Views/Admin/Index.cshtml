@@ -1,6 +1,7 @@
 @model Kursovoi.Models.AdminPanelViewModel
 @{
     ViewData["Title"] = "Admin Panel";
+    var fromLogin = Context.Request.Query.ContainsKey("fromLogin");
 }
 
 <h1>Панель администратора</h1>
@@ -167,19 +168,25 @@
         <th class="sortable" data-type="text">Пользователь</th>
         <th class="sortable" data-type="text">Товар</th>
         <th class="sortable" data-type="text">Заголовок</th>
+        <th class="sortable" data-type="text">Отзыв</th>
         <th class="sortable" data-type="number">Рейтинг</th>
         <th class="sortable" data-type="text">Дата</th>
+        <th>Действие</th>
       </tr></thead>
       <tbody>
       @foreach(var r in Model.Reviews)
       {
-        <tr>
+        <tr data-review-id="@r.ReviewId">
           <td>@r.ReviewId</td>
           <td>@r.Login (@r.UserId)</td>
+          <td><a href="@Url.Action("Details","Home", new { id = r.ProductId })">@r.ProductName</a></td>
           <td>@r.Title</td>
           <td>@r.Text</td>
           <td>@r.Rating</td>
           <td>@r.CreatedAt</td>
+          <td>
+            <button class="btn btn-sm toggle-review-approve-btn @(r.IsApproved ? "btn-outline-danger" : "btn-outline-success")" data-review-id="@r.ReviewId" data-new-approve="@(r.IsApproved ? "0" : "1")">@(r.IsApproved ? "Блокировать" : "Разблокировать")</button>
+          </td>
         </tr>
       }
       </tbody>
@@ -198,18 +205,41 @@
       <thead><tr>
         <th class="sortable" data-type="number">ID</th>
         <th class="sortable" data-type="number">ТоварID</th>
-        <th class="sortable" data-type="text">Дата</th>
+        <th class="sortable" data-type="text">Название</th>
+        <th class="sortable" data-type="text">Дата оформления</th>
         <th class="sortable" data-type="text">Статус</th>
+        <th class="sortable" data-type="text">Кто заказывает</th>
+        <th class="sortable" data-type="text">Адрес доставки</th>
         <th class="sortable" data-type="number">Сумма</th>
       </tr></thead>
       <tbody>
       @foreach(var o in Model.Orders)
       {
-        <tr>
+        <tr data-order-id="@o.OrderId">
           <td>@o.OrderId</td>
           <td>@o.ProductId</td>
+          <td>
+            @if(!string.IsNullOrEmpty(o.ProductName)) {
+                <a href="@Url.Action("Details","Home", new { id = o.ProductId })">@o.ProductName</a>
+            } else {
+                <a href="@Url.Action("Details","Home", new { id = o.ProductId })">Просмотр</a>
+            }
+          </td>
           <td>@o.CreatedAt</td>
-          <td>@o.Status</td>
+          <td>
+            <select class="form-select form-select-sm order-status-select" data-order-id="@o.OrderId">
+                @{ var _sel = o.Status == "Обработан" ? " selected=\"selected\"" : ""; }
+                @Html.Raw("<option value='Обработан'" + _sel + ">Обработан</option>")
+                @{ _sel = o.Status == "Идет доставка" ? " selected=\"selected\"" : ""; }
+                @Html.Raw("<option value='Идет доставка'" + _sel + ">Идет доставка</option>")
+                @{ _sel = o.Status == "Доставлен" ? " selected=\"selected\"" : ""; }
+                @Html.Raw("<option value='Доставлен'" + _sel + ">Доставлен</option>")
+                @{ _sel = o.Status == "Отменён" ? " selected=\"selected\"" : ""; }
+                @Html.Raw("<option value='Отменён'" + _sel + ">Отменён</option>")
+            </select>
+          </td>
+          <td>@o.UserLogin (@o.UserId)</td>
+          <td>@o.DeliveryAddress</td>
           <td>@o.TotalAmount</td>
         </tr>
       }
@@ -225,19 +255,31 @@
         <div class="ms-auto">Всего: <span id="categoriesCount">@Model.Categories.Count</span></div>
     </div>
 
+    <div class="mb-3 d-flex gap-2">
+        <input id="newCategoryName" class="form-control" placeholder="Новая категория" />
+        <button id="addCategoryBtn" class="btn btn-primary">Добавить</button>
+    </div>
+
     <table id="categoriesTable" class="table table-striped table-admin">
       <thead><tr>
         <th class="sortable" data-type="number">#</th>
         <th class="sortable" data-type="text">Название</th>
+        <th>Действия</th>
       </tr></thead>
       <tbody>
       @{ int idx = 0; }
       @foreach(var c in Model.Categories)
       {
         idx++;
-        <tr>
+        <tr data-category-id="@c.CategoryID">
           <td>@idx</td>
-          <td>@c.CategoryName</td>
+          <td class="cat-name">@c.CategoryName</td>
+          <td>
+            @* Use same route as public catalog (Home/Index?cat=...) so admin sees identical filtered list *@
+            <a class="btn btn-sm btn-link" asp-controller="Home" asp-action="Index" asp-route-cat="@c.CategoryName">Открыть</a>
+            <button class="btn btn-sm btn-outline-secondary edit-cat-btn">Изменить</button>
+            <button class="btn btn-sm btn-outline-danger delete-cat-btn">Удалить</button>
+          </td>
         </tr>
       }
       </tbody>
@@ -248,8 +290,51 @@
 @section Scripts {
 <script>
     document.addEventListener('DOMContentLoaded', function(){
-        var tokenInput = document.querySelector('#afForm input[name="__RequestVerificationToken"]');
+        var tokenInput = document.querySelector('form#afForm input[name="__RequestVerificationToken"]');
         var token = tokenInput ? tokenInput.value : null;
+
+        // if came from login, clear saved tab so first tab is shown
+        var fromLogin = @(fromLogin ? "true" : "false");
+        try {
+            if (fromLogin === true) { localStorage.removeItem('admin_active_tab'); }
+        } catch(e) {}
+
+        // restore previously selected admin tab (if any)
+        try {
+            var saved = localStorage.getItem('admin_active_tab');
+            if (saved) {
+                var btn = document.querySelector('[data-bs-target="' + saved + '"]');
+                if (btn) {
+                    var t = new bootstrap.Tab(btn);
+                    t.show();
+                }
+                localStorage.removeItem('admin_active_tab');
+            }
+        } catch(e) { /* ignore */ }
+
+        // remember selected tab when user switches
+        document.querySelectorAll('[data-bs-toggle="tab"]').forEach(function(b){
+            b.addEventListener('shown.bs.tab', function(ev){
+                try { localStorage.setItem('admin_active_tab', ev.target.getAttribute('data-bs-target')); } catch(e) {}
+            });
+        });
+
+        function saveCategoriesTabAndReload() {
+            try { localStorage.setItem('admin_active_tab', '#categories'); } catch(e) {}
+            location.reload();
+        }
+
+        // category add/edit/delete
+        document.getElementById('addCategoryBtn').addEventListener('click', function(){
+            var name = document.getElementById('newCategoryName').value.trim();
+            if (!name) { alert('Введите название категории'); return; }
+            var fd = new URLSearchParams(); fd.append('categoryName', name); if (token) fd.append('__RequestVerificationToken', token);
+            fetch('/Admin/AddCategory', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: fd.toString(), credentials: 'same-origin' }).then(r=>r.json()).then(function(data){ if (data && data.success) { alert('Категория добавлена'); saveCategoriesTabAndReload(); } else { alert('Ошибка: '+(data && data.message?data.message:'не удалось добавить')); } }).catch(function(){ alert('Ошибка'); });
+        });
+
+        document.querySelectorAll('.edit-cat-btn').forEach(function(btn){ btn.addEventListener('click', function(e){ var row = btn.closest('tr'); var id = row.getAttribute('data-category-id'); var nameCell = row.querySelector('.cat-name'); var old = nameCell.textContent.trim(); var newName = prompt('Новое название категории', old); if (newName && newName.trim()!==old) { var fd = new URLSearchParams(); fd.append('categoryId', id); fd.append('categoryName', newName.trim()); if (token) fd.append('__RequestVerificationToken', token); fetch('/Admin/UpdateCategory', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: fd.toString(), credentials: 'same-origin' }).then(r=>r.json()).then(function(data){ if (data && data.success) { alert('Обновлено'); saveCategoriesTabAndReload(); } else { alert('Ошибка: '+(data && data.message?data.message:'не удалось обновить')); } }).catch(function(){ alert('Ошибка'); }); } }); });
+
+        document.querySelectorAll('.delete-cat-btn').forEach(function(btn){ btn.addEventListener('click', function(e){ var row = btn.closest('tr'); var id = row.getAttribute('data-category-id'); if (!confirm('Удалить категорию? Товары будут перенесены в категорию 36')) return; var fd = new URLSearchParams(); fd.append('categoryId', id); if (token) fd.append('__RequestVerificationToken', token); fetch('/Admin/DeleteCategory', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: fd.toString(), credentials: 'same-origin' }).then(r=>r.json()).then(function(data){ if (data && data.success) { alert('Удалено'); saveCategoriesTabAndReload(); } else { alert('Ошибка: '+(data && data.message?data.message:'не удалось удалить')); } }).catch(function(){ alert('Ошибка'); }); }); });
 
         function attachToggleHandlers(root) {
             root.querySelectorAll('.toggle-status-btn').forEach(function(btn){
@@ -350,6 +435,46 @@
             fetch('/Admin/AddUser', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: fd.toString(), credentials: 'same-origin' }).then(function(r){ return r.json(); }).then(function(data){ if (data && data.success) { alert('Пользователь добавлен'); location.reload(); } else { alert('Ошибка: ' + (data && data.message ? data.message : 'не удалось добавить пользователя')); } }).catch(function(){ alert('Ошибка запроса'); });
         });
 
+        function attachReviewHandlers(root) {
+            root.querySelectorAll('.toggle-review-approve-btn').forEach(function(btn){
+                if (btn._attachedReview) return; btn._attachedReview = true;
+                btn.addEventListener('click', function(e){
+                    e.preventDefault();
+                    var reviewId = btn.getAttribute('data-review-id');
+                    var newApprove = btn.getAttribute('data-new-approve');
+                    if (!reviewId) return;
+                    var fd = new URLSearchParams(); fd.append('reviewId', reviewId); fd.append('approve', newApprove); if (token) fd.append('__RequestVerificationToken', token);
+                    fetch('/Admin/SetReviewApproval', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: fd.toString(), credentials: 'same-origin' }).then(function(r){ return r.json(); }).then(function(data){
+                        if (data && data.success) { var row = document.querySelector('tr[data-review-id="' + reviewId + '"]'); if (!row) return; var btnEl = row.querySelector('.toggle-review-approve-btn'); var isNowApproved = (newApprove === '1'); btnEl.textContent = isNowApproved ? 'Блокировать' : 'Разблокировать'; btnEl.classList.toggle('btn-outline-danger', isNowApproved); btnEl.classList.toggle('btn-outline-success', !isNowApproved); btnEl.setAttribute('data-new-approve', isNowApproved ? '0' : '1'); } else { alert('Ошибка: ' + (data && data.message ? data.message : 'не удалось обновить статус')); }
+                    }).catch(function(){ alert('Ошибка запроса'); });
+                });
+            });
+        }
+        attachReviewHandlers(document);
+
+        // attach handler for order status selects
+        function attachOrderStatusHandlers(root) {
+            root.querySelectorAll('.order-status-select').forEach(function(sel){
+                if (sel._attachedOrder) return; sel._attachedOrder = true;
+                sel.addEventListener('change', function(e){
+                    var orderId = sel.getAttribute('data-order-id');
+                    var newStatus = sel.value;
+                    if (!orderId) return;
+                    var fd = new URLSearchParams(); fd.append('orderId', orderId); fd.append('status', newStatus); if (token) fd.append('__RequestVerificationToken', token);
+                    fetch('/Admin/SetOrderStatus', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: fd.toString(), credentials: 'same-origin' }).then(function(r){ return r.json(); }).then(function(data){
+                        if (data && data.success) {
+                            // optional: show small success feedback
+                            sel.classList.add('is-valid');
+                            setTimeout(function(){ sel.classList.remove('is-valid'); }, 1500);
+                        } else {
+                            alert('Ошибка: ' + (data && data.message ? data.message : 'не удалось обновить статус'));
+                        }
+                    }).catch(function(){ alert('Ошибка запроса'); });
+                });
+            });
+        }
+        attachOrderStatusHandlers(document);
+
         // Search/filter for tables
         function filterTable(table, query) {
             query = (query || '').trim().toLowerCase();
@@ -388,7 +513,6 @@
         }
 
         document.querySelectorAll('table.table-admin thead th.sortable').forEach(function(th, idx){ th.style.cursor = 'pointer'; th._asc = true; th.addEventListener('click', function(e){ var table = th.closest('table'); var headers = Array.from(th.parentElement.children); var colIndex = headers.indexOf(th); var type = th.getAttribute('data-type') || 'text'; sortTable(table, colIndex, type, th._asc); th._asc = !th._asc; }); });
-
     });
 </script>
 }

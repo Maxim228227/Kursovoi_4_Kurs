@@ -31,12 +31,18 @@ namespace Kursovoi.Models
         public int Rating { get; set; }
         public string CreatedAt { get; set; }
         public bool IsApproved { get; set; }
+        // product reference
+        public int ProductId { get; set; }
+        public string ProductName { get; set; }
     }
 
     public class OrderViewModel
     {
         public int OrderId { get; set; }
         public int ProductId { get; set; }
+        public string ProductName { get; set; }
+        public int UserId { get; set; }
+        public string UserLogin { get; set; }
         public string CreatedAt { get; set; }
         public string Status { get; set; }
         public decimal TotalAmount { get; set; }

@@ -1,6 +1,6 @@
 @model string
 @{
-    ViewData["Title"] = "Мой профиль";
+    ViewData["Title"] = "Личный кабинет";
 }
 
 @{ // render antiforgery token for AJAX
@@ -8,7 +8,7 @@
 }
 
 <div class="store-hero text-center">
-    <h1 class="display-5">Мой профиль</h1>
+    <h1 class="display-5">Личный кабинет</h1>
     <p class="lead">Добро пожаловать, @User.Identity.Name</p>
 </div>
 
@@ -18,7 +18,7 @@
             <button class="list-group-item list-group-item-action active" data-bs-target="#purchases" data-bs-toggle="list" role="tab">Мои покупки</button>
             <button class="list-group-item list-group-item-action" data-bs-target="#orders" data-bs-toggle="list" role="tab">Мои заказы</button>
             <button class="list-group-item list-group-item-action" data-bs-target="#returns" data-bs-toggle="list" role="tab">Возврат</button>
-            <button class="list-group-item list-group-item-action" data-bs-target="#reviews" data-bs-toggle="list" role="tab">Мои комментарии и оценки</button>
+            <button class="list-group-item list-group-item-action" data-bs-target="#reviews" data-bs-toggle="list" role="tab">Мои отзывы и оценки</button>
         </div>
 
         <div class="mt-3">
@@ -40,7 +40,7 @@
                 <div id="returnsList">Загрузка...</div>
             </div>
             <div class="tab-pane fade" id="reviews" role="tabpanel">
-                <h5>Мои комментарии и оценки</h5>
+                <h5>Мои отзывы и оценки</h5>
                 <div id="reviewsList">Загрузка...</div>
             </div>
         </div>
@@ -52,11 +52,11 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="confirmDeleteModalLabel">Подтвердите удаление</h5>
+        <h5 class="modal-title" id="confirmDeleteModalLabel">Подтверждение удаления</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
       </div>
       <div class="modal-body">
-        Вы уверены, что хотите удалить свой аккаунт? Все данные будут помечены как неактивные.
+        Вы уверены, что хотите удалить ваш аккаунт? Это действие необратимо.
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
@@ -88,13 +88,18 @@
             var returnsTab = document.querySelector('[data-bs-target="#returns"]');
             if (returnsTab) returnsTab.addEventListener('shown.bs.tab', function() { loadReturns(); });
 
+            function linkOrId(productId, productName) {
+                if (productName && productName.length>0) return '<a href="/Home/Details?id='+encodeURIComponent(productId)+'">'+(productName||'Неизвестно')+'</a>';
+                return '<a href="/Home/Details?id='+encodeURIComponent(productId)+'">Товар #'+productId+'</a>';
+            }
+
             function loadOrders() {
                 fetch('/Account/GetOrders', { credentials: 'same-origin' }).then(r=>r.json()).then(data=>{
                     var el = document.getElementById('ordersList');
                     if (!data || !data.length) { el.innerHTML = '<div class="alert alert-warning">Нет заказов.</div>'; return; }
                     var html = '<table class="table"><thead><tr><th>ID</th><th>Товар</th><th>Дата</th><th>Статус</th><th>Сумма</th></tr></thead><tbody>';
-                    // show orders with status indicating "in transit" (e.g. "Идет доставка", "в пути")
-                    data.filter(function(o){ var s=(o.status||'').toLowerCase(); return s.indexOf('идет')!==-1 || s.indexOf('в пути')!==-1; }).forEach(function(o){ html += '<tr><td>'+o.orderId+'</td><td><a href="/Home/Details?id='+o.productId+'">'+o.productId+'</a></td><td>'+o.createdAt+'</td><td>'+o.status+'</td><td>'+o.totalAmount+'</td></tr>'; });
+                    // show orders with status indicating "in transit" (e.g. "Идет доставка", "В пути")
+                    data.filter(function(o){ var s=(o.status||'').toLowerCase(); return s.indexOf('идет')!==-1 || s.indexOf('в пути')!==-1; }).forEach(function(o){ html += '<tr><td>'+o.orderId+'</td><td>'+linkOrId(o.productId,o.productName)+'</td><td>'+o.createdAt+'</td><td>'+o.status+'</td><td>'+o.totalAmount+'</td></tr>'; });
                     html += '</tbody></table>';
                     el.innerHTML = html;
                 }).catch((err)=>{ console.error('loadOrders error', err); document.getElementById('ordersList').innerHTML = '<div class="alert alert-danger">Ошибка при загрузке заказов.</div>'; });
@@ -105,9 +110,9 @@
                     var el = document.getElementById('purchasesList');
                     if (!data || !data.length) { el.innerHTML = '<div class="alert alert-warning">Нет покупок.</div>'; return; }
                     var html = '<ul class="list-group">';
-                    // show only delivered orders (status contains 'достав') and exclude 'Идет доставка' / 'в пути'
+                    // show only delivered orders (status contains 'достав') and exclude 'идет доставка' / 'в пути'
                     data.filter(function(o){ var s=(o.status||'').toLowerCase(); return s.indexOf('достав')!==-1 && s.indexOf('идет')===-1 && s.indexOf('в пути')===-1; })
-                        .forEach(function(o){ html += '<li class="list-group-item">Заказ ' + o.orderId + ' — Товар: <a href="/Home/Details?id='+o.productId+'">'+o.productId+'</a> — '+o.createdAt+' — '+o.status+'</li>'; });
+                        .forEach(function(o){ html += '<li class="list-group-item">Заказ ' + o.orderId + ' — товар: '+linkOrId(o.productId,o.productName)+' от '+o.createdAt+' — '+o.status+'</li>'; });
                     html += '</ul>';
                     el.innerHTML = html;
                 }).catch((err)=>{ console.error('loadPurchases error', err); document.getElementById('purchasesList').innerHTML = '<div class="alert alert-danger">Ошибка при загрузке покупок.</div>'; });
@@ -117,12 +122,12 @@
                 fetch('/Account/GetReturns', { credentials: 'same-origin' }).then(r=>r.json()).then(data=>{
                     var el = document.getElementById('returnsList');
                     if (!data || !data.length) { el.innerHTML = '<div class="alert alert-warning">Нет возвратов.</div>'; return; }
-                    var html = '<div class="card"><div class="card-body"><h6>Запросы на возврат</h6><ul class="list-group">';
-                    // show cancelled orders (status contains 'отмен')
-                    data.filter(function(o){ var s=(o.status||'').toLowerCase(); return s.indexOf('отмен')!==-1; }).forEach(function(r){ html += '<li class="list-group-item">Заказ: <span>'+r.orderId+'</span> — Товар: <a href="/Home/Details?id='+r.productId+'">'+r.productId+'</a> — '+r.status+' — '+r.createdAt+'</li>'; });
+                    var html = '<div class="card"><div class="card-body"><h6>Возвраты по заказам</h6><ul class="list-group">';
+                    // show cancelled orders (status contains 'отмен') — check lowercased Cyrillic 'отмен'
+                    data.filter(function(o){ var s=(o.status||'').toLowerCase(); return s.indexOf('отмен')!==-1; }).forEach(function(r){ html += '<li class="list-group-item">Заказ: <span>'+r.orderId+'</span> — товар: '+linkOrId(r.productId,r.productName)+' — '+r.status+' — '+r.createdAt+'</li>'; });
                     html += '</ul></div></div>';
                     // CTA block for leaving an order
-                    html += '<div class="card mt-3"><div class="card-body"><h6>Оставить заказ</h6><p>Если вы хотите оставить новый заказ или отзыв, воспользуйтесь корзиной или перейдите на страницу товара.</p><a class="btn btn-primary" href="/Home/Index">Перейти в каталог</a></div></div>';
+                    html += '<div class="card mt-3"><div class="card-body"><h6>Нужен возврат?</h6><p>Если вы хотите вернуть товар, обратитесь в службу поддержки.</p><a class="btn btn-primary" href="/Home/Index">Продолжить покупки</a></div></div>';
                     el.innerHTML = html;
                 }).catch((err)=>{ console.error('loadReturns error', err); document.getElementById('returnsList').innerHTML = '<div class="alert alert-danger">Ошибка при загрузке возвратов.</div>'; });
             }
@@ -136,7 +141,7 @@
                         data.sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
                     } catch(e) { console.error('sort reviews error', e); }
                     var html = '<ul class="list-group">';
-                    data.forEach(function(rv){ html += '<li class="list-group-item"><strong>'+rv.title+'</strong><p>'+rv.reviewText+'</p><div class="small text-muted">Рейтинг: '+rv.rating+' — Товар: <a href="/Home/Details?id='+rv.productId+'">'+rv.productId+'</a></div></li>'; });
+                    data.forEach(function(rv){ html += '<li class="list-group-item"><strong>'+rv.title+'</strong><p>'+rv.reviewText+'</p><div class="small text-muted">Рейтинг: '+rv.rating+' — товар: '+linkOrId(rv.productId, rv.productName)+'</div></li>'; });
                     html += '</ul>';
                     el.innerHTML = html;
                 }).catch((err)=>{ console.error('loadReviews error', err); document.getElementById('reviewsList').innerHTML = '<div class="alert alert-danger">Ошибка при загрузке отзывов.</div>'; });

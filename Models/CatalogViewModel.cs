@@ -4,6 +4,7 @@ namespace Kursovoi.Models
 {
     public class CategoryViewModel
     {
+        public int CategoryID { get; set; }
         public string CategoryName { get; set; } = string.Empty;
         public string ImageUrl { get; set; } = string.Empty;
         public int Count { get; set; }

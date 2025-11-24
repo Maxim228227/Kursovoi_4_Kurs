@@ -6,6 +6,8 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using System.Globalization;
+using System.Collections.Generic;
 
 namespace Kursovoi.Controllers
 {
@@ -27,6 +29,7 @@ namespace Kursovoi.Controllers
 
             try
             {
+                var prodMap = BuildProductNameMap();
                 var resp = Models.UdpClientHelper.SendUdpMessage($"getuserorders|{userId}");
                 if (string.IsNullOrEmpty(resp)) return Json(new object[0]);
                 var lines = resp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
@@ -35,7 +38,76 @@ namespace Kursovoi.Controllers
                 {
                     var p = l.Split('|');
                     if (p.Length < 5) continue;
-                    list.Add(new { orderId = p[0], productId = p[1], createdAt = p[2], status = p[3], totalAmount = p[4] });
+                    var pid = p[1];
+                    var name = prodMap.TryGetValue(int.TryParse(pid, out var ip) ? ip : 0, out var nm) ? nm : null;
+                    list.Add(new { orderId = p[0], productId = p[1], productName = name, createdAt = p[2], status = p[3], totalAmount = p[4] });
+                }
+                return Json(list);
+            }
+            catch
+            {
+                return Json(new object[0]);
+            }
+        }
+
+        [HttpGet]
+        public IActionResult GetPurchases()
+        {
+            if (User?.Identity?.IsAuthenticated != true) return Json(new object[0]);
+            int userId = GetCurrentUserId();
+            if (userId <= 0) return Json(new object[0]);
+
+            try
+            {
+                var prodMap = BuildProductNameMap();
+                var resp = Models.UdpClientHelper.SendUdpMessage($"getuserorders|{userId}");
+                if (string.IsNullOrEmpty(resp)) return Json(new object[0]);
+                var lines = resp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                var list = new List<object>();
+                foreach (var l in lines)
+                {
+                    var p = l.Split('|');
+                    if (p.Length < 5) continue;
+                    var pid = p[1];
+                    var name = prodMap.TryGetValue(int.TryParse(pid, out var ip) ? ip : 0, out var nm) ? nm : null;
+                    list.Add(new { orderId = p[0], productId = p[1], productName = name, createdAt = p[2], status = p[3], totalAmount = p[4] });
+                }
+                return Json(list);
+            }
+            catch
+            {
+                return Json(new object[0]);
+            }
+        }
+
+        [HttpGet]
+        public IActionResult GetReturns()
+        {
+            if (User?.Identity?.IsAuthenticated != true) return Json(new object[0]);
+            int userId = GetCurrentUserId();
+            if (userId <= 0) return Json(new object[0]);
+
+            try
+            {
+                var prodMap = BuildProductNameMap();
+                // reuse getuserorders and filter for cancelled statuses
+                var resp = Models.UdpClientHelper.SendUdpMessage($"getuserorders|{userId}");
+                if (string.IsNullOrEmpty(resp)) return Json(new object[0]);
+                var lines = resp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                var list = new List<object>();
+                foreach (var l in lines)
+                {
+                    var p = l.Split('|');
+                    if (p.Length < 5) continue;
+                    var status = (p[3] ?? string.Empty).ToLowerInvariant();
+                    // consider any status that contains 'отмен' (covers Отменён/Отменен/Отмена)
+                    if (status.Contains("отмен"))
+                    {
+                        var pid = p[1];
+                        var name = prodMap.TryGetValue(int.TryParse(pid, out var ip) ? ip : 0, out var nm) ? nm : null;
+                        // orderId|productId|createdAt|status|totalAmount|payment|address|storeId
+                        list.Add(new { returnId = p[0], orderId = p[0], productId = p[1], productName = name, status = p[3], createdAt = p[2] });
+                    }
                 }
                 return Json(list);
             }
@@ -54,6 +126,7 @@ namespace Kursovoi.Controllers
 
             try
             {
+                var prodMap = BuildProductNameMap();
                 var resp = Models.UdpClientHelper.SendUdpMessage($"getuserreviews|{userId}");
                 if (string.IsNullOrEmpty(resp)) return Json(new object[0]);
                 var lines = resp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
@@ -62,7 +135,9 @@ namespace Kursovoi.Controllers
                 {
                     var p = l.Split('|');
                     if (p.Length < 6) continue;
-                    list.Add(new { reviewId = p[0], productId = p[1], title = p[2], reviewText = p[3], rating = p[4], createdAt = p[5] });
+                    var pid = p[1];
+                    var name = prodMap.TryGetValue(int.TryParse(pid, out var ip) ? ip : 0, out var nm) ? nm : null;
+                    list.Add(new { reviewId = p[0], productId = p[1], productName = name, title = p[2], reviewText = p[3], rating = p[4], createdAt = p[5] });
                 }
                 return Json(list);
             }
@@ -119,11 +194,11 @@ namespace Kursovoi.Controllers
             // If server returned FAIL => invalid credentials
             if (string.Equals(response, "FAIL", System.StringComparison.OrdinalIgnoreCase))
             {
-                ModelState.AddModelError(string.Empty, "Неправильный логин или пароль");
+                ModelState.AddModelError(string.Empty, "Неверные имя или пароль");
                 return View(model);
             }
 
-            // Otherwise treat response as role name (e.g. "admin" or "user")
+            // Otherwise treat response as role name (e.g. "admin" or "user" or "seller")
             var roleName = response; // not null/empty here
 
             // sign in with cookie authentication and include role claim
@@ -176,10 +251,16 @@ namespace Kursovoi.Controllers
                 // ignore
             }
 
-            // If admin, redirect to admin panel
+            // If admin, redirect to admin panel and request tab reset
             if (string.Equals(roleName, "admin", System.StringComparison.OrdinalIgnoreCase))
             {
-                return RedirectToAction("Index", "Admin");
+                return RedirectToAction("Index", "Admin", new { fromLogin = 1 });
+            }
+
+            // If seller, redirect to seller panel
+            if (string.Equals(roleName, "seller", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return RedirectToAction("Index", "Seller");
             }
 
             // don't set TempData message on successful login
@@ -262,66 +343,6 @@ namespace Kursovoi.Controllers
             }
         }
 
-        [HttpGet]
-        public IActionResult GetPurchases()
-        {
-            if (User?.Identity?.IsAuthenticated != true) return Json(new object[0]);
-            int userId = GetCurrentUserId();
-            if (userId <= 0) return Json(new object[0]);
-
-            try
-            {
-                var resp = Models.UdpClientHelper.SendUdpMessage($"getuserorders|{userId}");
-                if (string.IsNullOrEmpty(resp)) return Json(new object[0]);
-                var lines = resp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
-                var list = new List<object>();
-                foreach (var l in lines)
-                {
-                    var p = l.Split('|');
-                    if (p.Length < 5) continue;
-                    list.Add(new { orderId = p[0], productId = p[1], createdAt = p[2], status = p[3], totalAmount = p[4] });
-                }
-                return Json(list);
-            }
-            catch
-            {
-                return Json(new object[0]);
-            }
-        }
-
-        [HttpGet]
-        public IActionResult GetReturns()
-        {
-            if (User?.Identity?.IsAuthenticated != true) return Json(new object[0]);
-            int userId = GetCurrentUserId();
-            if (userId <= 0) return Json(new object[0]);
-
-            try
-            {
-                // reuse getuserorders and filter for cancelled statuses
-                var resp = Models.UdpClientHelper.SendUdpMessage($"getuserorders|{userId}");
-                if (string.IsNullOrEmpty(resp)) return Json(new object[0]);
-                var lines = resp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
-                var list = new List<object>();
-                foreach (var l in lines)
-                {
-                    var p = l.Split('|');
-                    if (p.Length < 5) continue;
-                    var status = p[3] ?? string.Empty;
-                    if (status.IndexOf("отмена", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        // orderId|productId|createdAt|status|totalAmount|payment|address|storeId
-                        list.Add(new { returnId = p[0], orderId = p[0], productId = p[1], status = p[3], createdAt = p[2] });
-                    }
-                }
-                return Json(list);
-            }
-            catch
-            {
-                return Json(new object[0]);
-            }
-        }
-
         private static string ComputeSha256Hash(string rawData)
         {
             using (var sha256 = SHA256.Create())
@@ -357,6 +378,25 @@ namespace Kursovoi.Controllers
                 // ignore
             }
             return 0;
+        }
+
+        private Dictionary<int, string> BuildProductNameMap()
+        {
+            var map = new Dictionary<int, string>();
+            try
+            {
+                var resp = Models.UdpClientHelper.SendUdpMessage("getproducts");
+                if (string.IsNullOrEmpty(resp)) return map;
+                var lines = resp.Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var l in lines)
+                {
+                    var p = l.Split('|');
+                    if (p.Length < 2) continue;
+                    if (int.TryParse(p[0], out var id)) map[id] = p[1];
+                }
+            }
+            catch { }
+            return map;
         }
     }
 }

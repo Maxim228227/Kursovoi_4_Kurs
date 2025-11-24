@@ -1,0 +1,59 @@
+@model Kursovoi.Models.SellerPanelViewModel
+@{
+    ViewData["Title"] = "Панель продавца";
+}
+
+<div class="seller-dashboard">
+    <h1>Панель продавца</h1>
+    <ul class="nav nav-tabs" id="sellerTabs" role="tablist">
+        <li class="nav-item" role="presentation"><button class="nav-link active" id="seller-products-tab" data-bs-toggle="tab" data-bs-target="#seller-products" type="button" role="tab">Товары</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-store-tab" data-bs-toggle="tab" data-bs-target="#seller-store" type="button" role="tab">Данные магазина</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-stock-tab" data-bs-toggle="tab" data-bs-target="#seller-stock" type="button" role="tab">Данные склада</button></li>
+    </ul>
+
+    <div class="tab-content mt-3">
+        <div class="tab-pane fade show active" id="seller-products" role="tabpanel">
+            <h3>Товары</h3>
+            <table class="table">
+                <thead><tr><th>ID</th><th>Название</th><th>Категория</th><th>Цена</th><th>Кол-во</th></tr></thead>
+                <tbody>
+                @foreach(var p in Model.Products)
+                {
+                    <tr><td>@p.ProductID</td><td>@p.ProductName</td><td>@p.CategoryName</td><td>@p.Price</td><td>@p.Quantity</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <div class="tab-pane fade" id="seller-store" role="tabpanel">
+            <h3>Данные магазина</h3>
+            <div>
+                <div><strong>Название:</strong> @Model.Store.StoreName</div>
+                <div><strong>Адрес:</strong> @Model.Store.Address</div>
+                <div><strong>Город:</strong> @Model.Store.City</div>
+                <div><strong>Телефон:</strong> @Model.Store.Phone</div>
+            </div>
+        </div>
+        <div class="tab-pane fade" id="seller-stock" role="tabpanel">
+            <h3>Данные склада</h3>
+            <table class="table">
+                <thead><tr><th>ProductID</th><th>Quantity</th></tr></thead>
+                <tbody>
+                @foreach(var s in Model.Stocks)
+                {
+                    <tr><td>@s.ProductID</td><td>@s.Quantity</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    // ensure first tab shown on load
+    document.addEventListener('DOMContentLoaded', function(){
+        var first = document.querySelector('#sellerTabs [data-bs-target="#seller-products"]');
+        if (first) new bootstrap.Tab(first).show();
+    });
+</script>
+}
