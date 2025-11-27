@@ -26,6 +26,12 @@
                                 <a class="nav-link text-dark" asp-controller="Admin" asp-action="Index">Панель администратора</a>
                             </li>
                         }
+                        else if (User?.IsInRole("seller") == true)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-controller="Seller" asp-action="Index">Панель продавца</a>
+                            </li>
+                        }
                         else
                         {
                             <li class="nav-item">
@@ -41,15 +47,13 @@
                     </ul>
 
                     <div class="d-flex align-items-center ms-3">
-                        <span class="top-right-store-name me-3">МаркетPRO</span>
+                        <span class="top-right-store-name me-3">@((ViewData["TopRightStoreName"] as string) ?? "МаркетPRO")</span>
 
-                        @{
-                            var cartCount = Context?.Session?.GetInt32("cartCount") ?? 0;
-                        }
+                        @{ var cartCount = Context?.Session?.GetInt32("cartCount") ?? 0; }
 
-                        @if (User?.IsInRole("admin") == true)
+                        @if (User?.IsInRole("admin") == true || User?.IsInRole("seller") == true)
                         {
-                            // Admin should not have access to cart/profile links; show only logout
+                            // Admin and seller: show only logout and store name
                             <form id="logoutForm" method="post" asp-controller="Account" asp-action="Logout" class="d-inline">@Html.AntiForgeryToken()
                                 <button class="btn btn-sm btn-outline-danger" type="submit">Выйти из аккаунта</button>
                             </form>

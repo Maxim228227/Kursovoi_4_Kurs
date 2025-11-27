@@ -213,6 +213,47 @@ namespace Kursovoi.Controllers
             catch (System.Exception ex) { return Json(new { success = false, message = ex.Message }); }
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult AddStore(string login, string password, string phone, string storeName, string address, string city, string legalPerson)
+        {
+            if (string.IsNullOrWhiteSpace(login) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(storeName))
+                return Json(new { success = false, message = "Login, password and store name are required" });
+
+            try
+            {
+                // 1) register seller account (roleId = 3)
+                var hash = ComputeSha256Hash(password);
+                var ph = string.IsNullOrWhiteSpace(phone) ? string.Empty : phone.Trim();
+                var regCmd = $"register|{login.Trim().Replace('|',' ')}|{hash}|3|{ph}";
+                var regResp = Models.UdpClientHelper.SendUdpMessage(regCmd);
+                if (string.IsNullOrEmpty(regResp) || !regResp.Trim().Equals("OK", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return Json(new { success = false, message = regResp ?? "Register failed" });
+                }
+
+                // 2) add store (include login so server can link user to store)
+                var sName = (storeName ?? string.Empty).Trim().Replace('|', ' ');
+                var sAddr = (address ?? string.Empty).Trim().Replace('|', ' ');
+                var sCity = (city ?? string.Empty).Trim().Replace('|', ' ');
+                var sPhone = (phone ?? string.Empty).Trim().Replace('|', ' ');
+                var sLegal = (legalPerson ?? string.Empty).Trim().Replace('|', ' ');
+
+                var addStoreCmd = $"addstore|{login.Trim().Replace('|',' ')}|{sName}|{sAddr}|{sCity}|{sPhone}|{sLegal}";
+                var storeResp = Models.UdpClientHelper.SendUdpMessage(addStoreCmd);
+                if (string.IsNullOrEmpty(storeResp) || !storeResp.Trim().Equals("OK", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return Json(new { success = false, message = storeResp ?? "Add store failed" });
+                }
+
+                return Json(new { success = true });
+            }
+            catch (System.Exception ex)
+            {
+                return Json(new { success = false, message = ex.Message });
+            }
+        }
+
         private static string ComputeSha256Hash(string rawData)
         {
             using (var sha256 = SHA256.Create())

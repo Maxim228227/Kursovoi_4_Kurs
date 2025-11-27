@@ -1,0 +1,31 @@
+@model Kursovoi.Models.CsvReportViewModel
+@{
+    ViewData["Title"] = "Отчет по CSV импорту";
+}
+
+<h2>Отчет по CSV импорту</h2>
+
+@if (!string.IsNullOrEmpty(Model.ReportText))
+{
+    <div class="alert alert-warning" style="white-space:pre-wrap;">@Model.ReportText</div>
+}
+
+@if (Model.CsvLines != null && Model.CsvLines.Any())
+{
+    <h4>Содержимое CSV (@Model.CsvFileName)</h4>
+    <table class="table table-sm table-bordered">
+        <thead><tr><th>#</th><th>Строка</th></tr></thead>
+        <tbody>
+        @for (int i=0;i<Model.CsvLines.Count;i++)
+        {
+            <tr><td>@(i+1)</td><td>@Model.CsvLines[i]</td></tr>
+        }
+        </tbody>
+    </table>
+}
+else
+{
+    <div class="alert alert-info">CSV файл не найден или пуст.</div>
+}
+
+<a class="btn btn-link" href="@Url.Action("AddProduct","Seller")">Назад</a>

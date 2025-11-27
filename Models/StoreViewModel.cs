@@ -10,5 +10,7 @@ namespace Kursovoi.Models
         public string LegalPerson { get; set; } = string.Empty;
         // Status: true = active, false = frozen
         public bool Status { get; set; }
+        // Registration date as string (yyyy-MM-dd) if available
+        public string RegistrationDate { get; set; } = string.Empty;
     }
 }

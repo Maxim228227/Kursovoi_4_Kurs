@@ -1,46 +1,83 @@
 @model Kursovoi.Models.SellerPanelViewModel
 @{
     ViewData["Title"] = "Панель продавца";
+    var fromLogin = Context.Request.Query.ContainsKey("fromLogin");
 }
 
 <div class="seller-dashboard">
     <h1>Панель продавца</h1>
+    @* Hidden antiforgery token for AJAX *@
+    <form id="afForm">@Html.AntiForgeryToken()</form>
+
     <ul class="nav nav-tabs" id="sellerTabs" role="tablist">
         <li class="nav-item" role="presentation"><button class="nav-link active" id="seller-products-tab" data-bs-toggle="tab" data-bs-target="#seller-products" type="button" role="tab">Товары</button></li>
-        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-store-tab" data-bs-toggle="tab" data-bs-target="#seller-store" type="button" role="tab">Данные магазина</button></li>
-        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-stock-tab" data-bs-toggle="tab" data-bs-target="#seller-stock" type="button" role="tab">Данные склада</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-store-tab" data-bs-toggle="tab" data-bs-target="#seller-store" type="button" role="tab">Информация о магазине</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-stock-tab" data-bs-toggle="tab" data-bs-target="#seller-stock" type="button" role="tab">Склад</button></li>
     </ul>
 
     <div class="tab-content mt-3">
         <div class="tab-pane fade show active" id="seller-products" role="tabpanel">
-            <h3>Товары</h3>
-            <table class="table">
-                <thead><tr><th>ID</th><th>Название</th><th>Категория</th><th>Цена</th><th>Кол-во</th></tr></thead>
+            <h3>Товары (магазин: <span class="text-primary">@Model.Store.StoreName</span>)</h3>
+
+            <div class="mb-2 d-flex">
+                <input type="search" class="form-control seller-search me-2" data-target="#sellerProductsTable" placeholder="Поиск по таблице..." />
+                <div class="ms-auto">Всего: <span id="sellerProductsCount">@Model.Products.Count</span></div>
+            </div>
+
+            <table id="sellerProductsTable" class="table table-striped table-sortable">
+                <thead><tr><th class="sortable" data-type="text">Название</th><th class="sortable" data-type="text">Категория</th><th class="sortable" data-type="number">Цена</th><th class="sortable" data-type="number">Кол-во</th></tr></thead>
                 <tbody>
                 @foreach(var p in Model.Products)
                 {
-                    <tr><td>@p.ProductID</td><td>@p.ProductName</td><td>@p.CategoryName</td><td>@p.Price</td><td>@p.Quantity</td></tr>
+                    <tr data-product-id="@p.ProductID"><td><a href="@Url.Action("Details","Home", new { id = p.ProductID })">@p.ProductName</a></td><td>@p.CategoryName</td><td>@p.Price</td><td>@p.Quantity</td></tr>
                 }
                 </tbody>
             </table>
         </div>
         <div class="tab-pane fade" id="seller-store" role="tabpanel">
-            <h3>Данные магазина</h3>
+            <h3>Информация о магазине</h3>
+            <div class="mb-2 d-flex">
+                <div class="ms-auto">Всего: <span id="sellerStoreCount">1</span></div>
+            </div>
             <div>
-                <div><strong>Название:</strong> @Model.Store.StoreName</div>
+                <div><strong>Название магазина:</strong> @Model.Store.StoreName</div>
                 <div><strong>Адрес:</strong> @Model.Store.Address</div>
                 <div><strong>Город:</strong> @Model.Store.City</div>
                 <div><strong>Телефон:</strong> @Model.Store.Phone</div>
+                <div><strong>Юридическое лицо:</strong> @Model.Store.LegalPerson</div>
+                <div><strong>Дата регистрации:</strong> @Model.Store.RegistrationDate</div>
             </div>
         </div>
         <div class="tab-pane fade" id="seller-stock" role="tabpanel">
-            <h3>Данные склада</h3>
-            <table class="table">
-                <thead><tr><th>ProductID</th><th>Quantity</th></tr></thead>
+            <h3>Склад</h3>
+
+            <div class="mb-2 d-flex">
+                <input type="search" class="form-control seller-search me-2" data-target="#sellerStockTable" placeholder="Поиск по таблице..." />
+                <div>
+                    <a class="btn btn-sm btn-success me-2" href="@Url.Action("AddProduct","Seller")">Добавить товар</a>
+                    <label class="btn btn-sm btn-secondary mb-0">Загрузить CSV<input id="csvFileInput" type="file" accept=".csv" hidden></label>
+                </div>
+                <div class="ms-auto">Всего: <span id="sellerStockCount">@Model.Stocks.Count</span></div>
+            </div>
+
+            <table id="sellerStockTable" class="table table-striped table-sortable">
+                <thead><tr><th class="sortable" data-type="text">Название товара</th><th class="sortable" data-type="number">Количество</th><th class="sortable" data-type="date">Дата обновления</th><th></th></tr></thead>
                 <tbody>
                 @foreach(var s in Model.Stocks)
                 {
-                    <tr><td>@s.ProductID</td><td>@s.Quantity</td></tr>
+                    <tr>
+                        <td>@s.ProductName</td>
+                        <td>
+                            <form method="post" asp-controller="Seller" asp-action="SetStock" class="d-flex align-items-center stock-form">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="productId" value="@s.ProductID" />
+                                <input type="number" name="quantity" class="form-control form-control-sm me-2" value="@s.Quantity" min="0" style="width:110px;" />
+                                <button type="submit" class="btn btn-sm btn-primary">Сохранить</button>
+                            </form>
+                        </td>
+                        <td>@(s.UpdatedAt == System.DateTime.MinValue ? "-" : s.UpdatedAt.ToString("yyyy-MM-dd HH:mm"))</td>
+                        <td></td>
+                    </tr>
                 }
                 </tbody>
             </table>
@@ -50,10 +87,152 @@
 
 @section Scripts {
 <script>
-    // ensure first tab shown on load
     document.addEventListener('DOMContentLoaded', function(){
-        var first = document.querySelector('#sellerTabs [data-bs-target="#seller-products"]');
-        if (first) new bootstrap.Tab(first).show();
+        var tokenInput = document.querySelector('form#afForm input[name="__RequestVerificationToken"]');
+        var token = tokenInput ? tokenInput.value : null;
+
+        // CSV upload handling: read file and send rows to server via UDP addproduct
+        var csvInput = document.getElementById('csvFileInput');
+        if (csvInput) {
+            csvInput.addEventListener('change', function(e){
+                var f = csvInput.files[0];
+                if (!f) return;
+                if (!confirm('Загрузить CSV и добавить товары?')) return;
+                var reader = new FileReader();
+                reader.onload = function(ev){
+                    var text = ev.target.result;
+                    var lines = text.split(/\r?\n/).map(function(l){ return l.trim(); }).filter(function(l){ return l.length>0; });
+                    var added = 0; var failed = 0;
+                    lines.forEach(function(line, idx){
+                        // naive CSV split on commas (no quoted commas handling)
+                        var cols = line.split(',');
+                        if (cols.length < 8) { failed++; return; }
+                        var name = cols[0].replace(/^\s*"?|"?\s*$/g, '');
+                        var cat = cols[1].trim();
+                        var man = cols[2].trim();
+                        var desc = cols[3].replace(/^\s*"?|"?\s*$/g, '');
+                        var price = cols[4].trim();
+                        var discount = cols[5].trim();
+                        var qty = cols[6].trim();
+                        var img = cols[7].replace(/^\s*"?|"?\s*$/g, '');
+                        // send to server via fetch to Seller/AddProductCsv (POST) endpoint
+                        var fd = new FormData();
+                        fd.append('ProductName', name);
+                        fd.append('CategoryId', cat);
+                        fd.append('ManufacturerId', man);
+                        fd.append('Description', desc);
+                        fd.append('Price', price);
+                        fd.append('Discount', discount);
+                        fd.append('Quantity', qty);
+                        fd.append('ImageUrl', img);
+                        if (token) fd.append('__RequestVerificationToken', token);
+
+                        fetch('/Seller/AddProductFromCsv', { method: 'POST', body: fd, credentials: 'same-origin' }).then(function(r){ return r.json(); }).then(function(res){
+                            if (res && res.success) added++; else failed++;
+                        }).catch(function(){ failed++; });
+                    });
+                    setTimeout(function(){ alert('Добавлено: '+added+'; Ошибок: '+failed); location.reload(); }, 1500);
+                };
+                reader.readAsText(f, 'utf-8');
+            });
+        }
+
+        // if came from login, clear saved tab so first tab is shown
+        var fromLogin = @(fromLogin ? "true" : "false");
+        try {
+            if (fromLogin === true) { localStorage.removeItem('seller_active_tab'); }
+        } catch(e) {}
+
+        // restore previously selected seller tab
+        try {
+            var saved = localStorage.getItem('seller_active_tab');
+            if (saved) {
+                var btn = document.querySelector('[data-bs-target="' + saved + '"]');
+                if (btn) {
+                    var t = new bootstrap.Tab(btn);
+                    t.show();
+                }
+                // don't remove saved state here — allow persistence until user changes
+            }
+        } catch(e) { /* ignore */ }
+
+        // remember selected tab when user switches
+        document.querySelectorAll('[data-bs-toggle="tab"]').forEach(function(b){
+            b.addEventListener('shown.bs.tab', function(ev){
+                try { localStorage.setItem('seller_active_tab', ev.target.getAttribute('data-bs-target')); } catch(e) {}
+            });
+        });
+
+        // Search/filter for tables
+        function filterTable(table, query) {
+            query = (query || '').trim().toLowerCase();
+            var rows = table.tBodies[0].rows;
+            var visible = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var r = rows[i];
+                var text = r.textContent.trim().toLowerCase();
+                if (text.indexOf(query) !== -1) { r.style.display = ''; visible++; }
+                else { r.style.display = 'none'; }
+            }
+            return visible;
+        }
+
+        document.querySelectorAll('.seller-search').forEach(function(inp){
+            inp.addEventListener('input', function(e){
+                var target = document.querySelector(inp.getAttribute('data-target'));
+                if (!target) return;
+                var visible = filterTable(target, inp.value);
+                var el = document.getElementById(target.id === 'sellerProductsTable' ? 'sellerProductsCount' : (target.id === 'sellerStockTable' ? 'sellerStockCount' : null));
+                if (el) el.textContent = visible;
+            });
+        });
+
+        // Sorting for tables with class table-sortable
+        function sortTable(table, colIndex, type, asc) {
+            var tbody = table.tBodies[0];
+            var rows = Array.from(tbody.rows);
+            var comparer;
+            if (type === 'number') {
+                comparer = function(a,b){ var va = parseFloat(a.cells[colIndex].textContent.replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0; var vb = parseFloat(b.cells[colIndex].textContent.replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0; return va - vb; };
+            } else if (type === 'date') { comparer = function(a,b){ var da = Date.parse(a.cells[colIndex].textContent) || 0; var db = Date.parse(b.cells[colIndex].textContent) || 0; return da - db; };
+            } else { comparer = function(a,b){ var sa = a.cells[colIndex].textContent.trim().toLowerCase(); var sb = b.cells[colIndex].textContent.trim().toLowerCase(); if (sa < sb) return -1; if (sa > sb) return 1; return 0; }; }
+            rows.sort(function(a,b){ return asc ? comparer(a,b) : -comparer(a,b); });
+            rows.forEach(function(r){ tbody.appendChild(r); });
+        }
+
+        document.querySelectorAll('table.table-sortable thead th.sortable').forEach(function(th, idx){ th.style.cursor = 'pointer'; th._asc = true; th.addEventListener('click', function(e){ var table = th.closest('table'); var headers = Array.from(th.parentElement.children); var colIndex = headers.indexOf(th); var type = th.getAttribute('data-type') || 'text'; sortTable(table, colIndex, type, th._asc); th._asc = !th._asc; }); });
+
+        // Intercept stock form submissions to use AJAX and update row without full reload
+        document.querySelectorAll('.stock-form').forEach(function(f){
+            f.addEventListener('submit', function(e){
+                e.preventDefault();
+                var form = e.currentTarget;
+                var fd = new FormData(form);
+                var btn = form.querySelector('button[type="submit"]');
+                var orig = btn.textContent;
+                btn.disabled = true; btn.textContent = 'Сохранение...';
+
+                fetch(form.action, {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin'
+                }).then(function(r){ return r.json().catch(function(){ return null; }); }).then(function(data){
+                    if (data && data.success) {
+                        // update UpdatedAt cell in the same row
+                        var row = form.closest('tr');
+                        if (row) {
+                            var dateCell = row.cells[2];
+                            if (dateCell) dateCell.textContent = new Date().toLocaleString();
+                        }
+                    } else {
+                        alert('Ошибка сохранения');
+                    }
+                }).catch(function(){ alert('Ошибка сети'); }).finally(function(){ btn.disabled = false; btn.textContent = orig; });
+            });
+        });
+
+        // Do not force-show any tab here; rely on persisted saved tab or server-rendered active class
     });
 </script>
 }

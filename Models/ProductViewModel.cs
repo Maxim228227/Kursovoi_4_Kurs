@@ -24,5 +24,7 @@ namespace Kursovoi.Models
         public int StoreID { get; set; }
         // Status column: true = frozen, false = active
         public bool Status { get; set; }
+        // Stock last update timestamp (from Stocks.LastUpdate)
+        public DateTime StockUpdatedAt { get; set; }
     }
 }

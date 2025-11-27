@@ -10,7 +10,7 @@
 }
 
 <div class="store-hero text-center mb-4">
-    <h1 class="display-5">Ваша корзина</h1>
+    <h1 class="display-5">Корзина товаров</h1>
 </div>
 
 @if (Model == null || !Model.Any())
@@ -22,6 +22,7 @@ else
     <div class="mb-3 d-flex justify-content-between">
         <div>
             <button id="proceedBtn" class="btn btn-sm btn-primary">Перейти к оформлению</button>
+            <button id="selectAllBtn" class="btn btn-sm btn-outline-secondary ms-2">Выбрать всё</button>
         </div>
         <form method="post" asp-controller="Cart" asp-action="Clear">
             @Html.AntiForgeryToken()
@@ -68,7 +69,7 @@ else
     </div>
 
     <div class="mt-3 text-end">
-        <h5>Сумма: <strong>@(total == 0 ? "0 Br" : (total % 1 == 0 ? $"{total:0} Br" : $"{total:0.##} Br"))</strong></h5>
+        <h5>Итого: <strong>@(total == 0 ? "0 Br" : (total % 1 == 0 ? $"{total:0} Br" : $"{total:0.##} Br"))</strong></h5>
     </div>
 }
 
@@ -81,7 +82,19 @@ else
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             var proceedBtn = document.getElementById('proceedBtn');
+            var selectAllBtn = document.getElementById('selectAllBtn');
             var isAuth = @((isAuth) ? "true" : "false");
+
+            function getCheckboxes() { return Array.from(document.querySelectorAll('.cart-select')); }
+
+            selectAllBtn.addEventListener('click', function() {
+                var boxes = getCheckboxes();
+                if (boxes.length === 0) return;
+                var anyUnchecked = boxes.some(function(cb){ return !cb.checked; });
+                boxes.forEach(function(cb){ cb.checked = anyUnchecked; });
+                selectAllBtn.textContent = anyUnchecked ? 'Снять выделение' : 'Выбрать всё';
+            });
+
             proceedBtn.addEventListener('click', function() {
                 var checked = Array.from(document.querySelectorAll('.cart-select:checked'));
                 if (checked.length === 0) { alert('Выберите товары для оформления.'); return; }
