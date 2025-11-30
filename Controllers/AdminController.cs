@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using System.Linq;
+using System;
 
 namespace Kursovoi.Controllers
 {
@@ -58,6 +59,167 @@ namespace Kursovoi.Controllers
             vm.Orders = orders;
 
             return View(vm);
+        }
+
+        [HttpGet]
+        public IActionResult Analytics()
+        {
+            var vm = new AdminAnalyticsViewModel();
+
+            // fetch base data
+            var prodResp = UdpClientHelper.SendUdpMessage("getproducts");
+            var products = ParseProducts(prodResp);
+
+            var storesResp = UdpClientHelper.SendUdpMessage("getallstores");
+            var stores = ParseStores(storesResp);
+
+            var usersResp = UdpClientHelper.SendUdpMessage("getusers");
+            var users = ParseUsers(usersResp);
+
+            var catsResp = UdpClientHelper.SendUdpMessage("getallcategories");
+            var categories = ParseCategories(catsResp);
+
+            // gather orders (aggregate per user)
+            var orders = new List<OrderViewModel>();
+            foreach (var u in users)
+            {
+                var or = UdpClientHelper.SendUdpMessage($"getuserorders|{u.UserID}");
+                orders.AddRange(ParseOrders(or, u));
+            }
+
+            // attach product names to orders
+            foreach (var o in orders)
+            {
+                var prod = products.FirstOrDefault(p => p.ProductID == o.ProductId);
+                if (prod != null) o.ProductName = prod.ProductName;
+            }
+
+            // gather reviews per product
+            var reviews = new List<ReviewViewModel>();
+            foreach (var p in products)
+            {
+                var rresp = UdpClientHelper.SendUdpMessage($"getproductreviewsall|{p.ProductID}");
+                reviews.AddRange(ParseReviews(rresp, p));
+            }
+
+            // Summary statistics
+            vm.TotalProducts = products.Count;
+            vm.TotalOrders = orders.Count;
+            vm.TotalRevenue = orders.Sum(o => o.TotalAmount);
+            vm.TotalTurnover = vm.TotalRevenue;
+            vm.CancelledOrders = orders.Count(o => !string.IsNullOrEmpty(o.Status) && o.Status.IndexOf("cancel", StringComparison.OrdinalIgnoreCase) >= 0);
+            vm.CancelledOrdersPercentage = vm.TotalOrders == 0 ? 0m : (decimal)vm.CancelledOrders * 100m / vm.TotalOrders;
+
+            // Store performance
+            foreach (var s in stores)
+            {
+                var so = orders.Where(o => o.StoreId == s.StoreID).ToList();
+                var totalSales = so.Sum(o => o.TotalAmount);
+                var orderCount = so.Count;
+                vm.StorePerformance.Add(new StorePerformanceItem
+                {
+                    StoreID = s.StoreID,
+                    StoreName = s.StoreName,
+                    TotalSales = totalSales,
+                    OrderCount = orderCount,
+                    AverageOrderValue = orderCount > 0 ? totalSales / orderCount : 0m,
+                    RegistrationDate = s.RegistrationDate ?? string.Empty
+                });
+            }
+
+            // Category analytics
+            foreach (var c in categories)
+            {
+                var prodForCat = products.Where(p => string.Equals(p.CategoryName?.Trim(), c.CategoryName?.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+                var prodIds = prodForCat.Select(p => p.ProductID).ToHashSet();
+                var ordersForCat = orders.Where(o => prodIds.Contains(o.ProductId)).ToList();
+                vm.CategoryAnalytics.Add(new CategoryAnalyticsItem
+                {
+                    CategoryID = c.CategoryID,
+                    CategoryName = c.CategoryName,
+                    ProductCount = prodForCat.Count,
+                    OrderCount = ordersForCat.Count,
+                    Revenue = ordersForCat.Sum(o => o.TotalAmount)
+                });
+            }
+
+            // Sales by month
+            var salesGroups = orders.Where(o => !string.IsNullOrEmpty(o.CreatedAt)).Select(o => new { Order = o, Date = TryParseDate(o.CreatedAt) })
+                .Where(x => x.Date.HasValue)
+                .GroupBy(x => new { x.Date.Value.Year, x.Date.Value.Month })
+                .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month);
+            foreach (var g in salesGroups)
+            {
+                vm.SalesByMonth.Add(new SalesPeriodData { Month = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("yyyy-MM"), OrderCount = g.Count(), TotalAmount = g.Sum(x => x.Order.TotalAmount) });
+            }
+
+            // Users analytics
+            vm.TotalUsers = users.Count;
+            vm.ActiveUsers = users.Count(u => u.IsActive);
+            foreach (var u in users)
+            {
+                var usOrders = orders.Where(o => o.UserId == u.UserID).ToList();
+                vm.UserAnalytics.Add(new UserAnalyticsItem
+                {
+                    UserID = u.UserID,
+                    Login = u.Login,
+                    RoleName = u.RoleName,
+                    OrderCount = usOrders.Count,
+                    TotalSpent = usOrders.Sum(o => o.TotalAmount),
+                    IsActive = u.IsActive
+                });
+            }
+
+            // Product performance
+            var prodOrderGroups = orders.GroupBy(o => o.ProductId).ToDictionary(g => g.Key, g => g.ToList());
+            foreach (var p in products)
+            {
+                prodOrderGroups.TryGetValue(p.ProductID, out var ords);
+                var qSold = ords?.Count ?? 0; // assume one order = one qty
+                var revenue = ords?.Sum(o => o.TotalAmount) ?? 0m;
+                var prodReviews = reviews.Where(r => r.ProductId == p.ProductID).ToList();
+                decimal avgRating = 0m;
+                if (prodReviews.Any()) avgRating = prodReviews.Average(r => (decimal)r.Rating);
+                vm.BestProducts.Add(new ProductPerformanceItem { ProductID = p.ProductID, ProductName = p.ProductName, QuantitySold = qSold, Revenue = revenue, AverageRating = avgRating });
+            }
+            // sort best and worst
+            vm.BestProducts = vm.BestProducts.OrderByDescending(x => x.QuantitySold).ThenByDescending(x => x.Revenue).Take(10).ToList();
+            vm.WorstProducts = vm.BestProducts.OrderBy(x => x.QuantitySold).ThenBy(x => x.Revenue).Take(10).ToList();
+
+            // Review analytics
+            var revGroups = reviews.GroupBy(r => r.ProductId);
+            foreach (var g in revGroups)
+            {
+                vm.ReviewAnalytics.Add(new GlobalReviewAnalyticsItem { ProductID = g.Key, ProductName = products.FirstOrDefault(p => p.ProductID == g.Key)?.ProductName ?? string.Empty, ReviewCount = g.Count(), AverageRating = (decimal)g.Average(r => r.Rating) });
+            }
+            vm.GlobalAverageRating = reviews.Any() ? (decimal)reviews.Average(r => r.Rating) : 0m;
+
+            // Price & discount analytics
+            vm.AveragePrice = products.Any() ? products.Average(p => p.Price) : 0m;
+            vm.AverageDiscount = products.Any() ? products.Average(p => p.Discount) : 0m;
+
+            // price buckets
+            var buckets = new[] { (0m, 100m, "0-100"), (100m, 500m, "100-500"), (500m, 1000m, "500-1000"), (1000m, decimal.MaxValue, "1000+") };
+            foreach (var b in buckets)
+            {
+                var list = products.Where(p => p.Price >= b.Item1 && p.Price < b.Item2).ToList();
+                vm.PriceAnalytics.Add(new PriceAnalyticsItem { PriceRange = b.Item3, ProductCount = list.Count, AverageDiscount = list.Any() ? list.Average(p => p.Discount) : 0m });
+            }
+
+            // total revenue already set
+            vm.TotalRevenue = vm.TotalRevenue;
+
+            return View("Analytics", vm);
+        }
+
+        private static DateTime? TryParseDate(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return null;
+            if (DateTime.TryParse(s, out var dt)) return dt;
+            // try common formats
+            var formats = new[] { "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd", "dd.MM.yyyy", "dd.MM.yyyy HH:mm:ss" };
+            foreach (var f in formats) if (DateTime.TryParseExact(s, f, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt)) return dt;
+            return null;
         }
 
         [HttpPost]

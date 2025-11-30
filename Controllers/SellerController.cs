@@ -545,5 +545,180 @@ namespace Kursovoi.Controllers
             }
             return sb.ToString();
         }
+
+        [HttpGet]
+        public IActionResult Analytics()
+        {
+            var model = new SellerAnalyticsViewModel();
+            // set categories for filter dropdown
+            ViewBag.Categories = GetCategories();
+
+            // populate basic store id
+            model.StoreId = GetSellerStoreId();
+
+            // default date range: last 30 days
+            var end = System.DateTime.UtcNow.Date;
+            var start = end.AddDays(-30);
+
+            try
+            {
+                // reuse GetSellerAnalytics logic to fill model
+                var json = GetSellerAnalyticsInternal(start, end, 0);
+                if (json != null)
+                {
+                    model = json;
+                    model.StoreId = GetSellerStoreId();
+                }
+            }
+            catch { }
+
+            return View(model);
+        }
+
+        [HttpGet]
+        public IActionResult GetSellerAnalytics(string startDate = null, string endDate = null, int categoryId = 0)
+        {
+            DateTime start, end;
+            if (!DateTime.TryParse(startDate, out start)) start = DateTime.UtcNow.Date.AddDays(-30);
+            if (!DateTime.TryParse(endDate, out end)) end = DateTime.UtcNow.Date;
+
+            try
+            {
+                var model = GetSellerAnalyticsInternal(start, end, categoryId);
+                return Json(model);
+            }
+            catch (Exception ex)
+            {
+                return Json(new { error = ex.Message });
+            }
+        }
+
+        // internal builder used by both actions
+        private SellerAnalyticsViewModel GetSellerAnalyticsInternal(DateTime start, DateTime end, int categoryId)
+        {
+            var vm = new SellerAnalyticsViewModel();
+            int storeId = GetSellerStoreId();
+            vm.StoreId = storeId;
+
+            // fetch products and filter by store/category
+            var prodResp = Models.UdpClientHelper.SendUdpMessage("getproducts");
+            var products = ParseProducts(prodResp);
+            if (storeId > 0) products = products.Where(p => p.StoreID == storeId).ToList();
+            if (categoryId > 0)
+            {
+                try
+                {
+                    var cats = GetCategories();
+                    var catName = cats.FirstOrDefault(kv => kv.Key == categoryId).Value;
+                    if (!string.IsNullOrEmpty(catName)) products = products.Where(p => string.Equals(p.CategoryName?.Trim(), catName.Trim(), System.StringComparison.OrdinalIgnoreCase)).ToList();
+                }
+                catch { }
+            }
+            // Note: categoryId mapping by name not available here; skip strong filter unless category names/ids mapping provided
+
+            // Running out / out of stock
+            foreach (var p in products)
+            {
+                if (p.Quantity <= 0)
+                {
+                    vm.OutOfStockProducts.Add(new StockAnalyticsItem { ProductID = p.ProductID, ProductName = p.ProductName, Quantity = p.Quantity, LastUpdate = p.StockUpdatedAt == System.DateTime.MinValue ? System.DateTime.MinValue : p.StockUpdatedAt });
+                }
+                else if (p.Quantity <= 10)
+                {
+                    vm.RunningOutProducts.Add(new StockAnalyticsItem { ProductID = p.ProductID, ProductName = p.ProductName, Quantity = p.Quantity, LastUpdate = p.StockUpdatedAt == System.DateTime.MinValue ? System.DateTime.MinValue : p.StockUpdatedAt });
+                }
+            }
+
+            // Orders by date range (use server helper)
+            var startStr = start.ToString("yyyy-MM-dd");
+            var endStr = end.ToString("yyyy-MM-dd");
+            var ordersResp = Models.UdpClientHelper.SendUdpMessage($"getordersbydaterange|{startStr}|{endStr}|{storeId}");
+            var orders = new List<(int OrderId, int ProductId, DateTime CreatedAt, string Status, decimal Total)>();
+            if (!string.IsNullOrEmpty(ordersResp))
+            {
+                var lines = ordersResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                foreach (var l in lines)
+                {
+                    var parts = l.Split('|');
+                    if (parts.Length < 5) continue;
+                    if (!int.TryParse(parts[0], out var oid)) continue;
+                    int pid = int.TryParse(parts[1], out var tpid) ? tpid : 0;
+                    DateTime created = DateTime.TryParse(parts[2], out var dt) ? dt : DateTime.MinValue;
+                    string status = parts[3];
+                    decimal total = decimal.TryParse(parts[4], NumberStyles.Any, CultureInfo.InvariantCulture, out var dec) ? dec : 0m;
+                    orders.Add((oid, pid, created, status, total));
+                }
+            }
+
+            // group orders by day
+            var ordersByDay = orders.GroupBy(o => o.CreatedAt.Date).OrderBy(g => g.Key);
+            foreach (var g in ordersByDay)
+            {
+                vm.OrdersByDay.Add(new OrderPeriodData { Period = g.Key.ToString("yyyy-MM-dd"), OrderCount = g.Count(), TotalAmount = g.Sum(x => x.Total) });
+            }
+
+            vm.AverageOrderAmount = orders.Any() ? orders.Average(o => o.Total) : 0m;
+
+            // Top selling products
+            var topResp = Models.UdpClientHelper.SendUdpMessage($"gettopsellingproducts|{storeId}|{startStr}|{endStr}");
+            if (!string.IsNullOrEmpty(topResp))
+            {
+                var lines = topResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                foreach (var l in lines)
+                {
+                    var p = l.Split('|');
+                    if (p.Length < 4) continue;
+                    if (!int.TryParse(p[0], out var prodId)) continue;
+                    var name = p[1];
+                    int qty = int.TryParse(p[2], out var qv) ? qv : 0;
+                    decimal rev = decimal.TryParse(p[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var rv) ? rv : 0m;
+                    vm.TopSellingProducts.Add(new TopProductItem { ProductID = prodId, ProductName = name, QuantitySold = qty, Revenue = rev });
+                }
+            }
+
+            // Abandoned baskets
+            var abandonedResp = Models.UdpClientHelper.SendUdpMessage($"getabandonedbaskets|{storeId}|7");
+            if (!string.IsNullOrEmpty(abandonedResp))
+            {
+                var lines = abandonedResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                foreach (var l in lines)
+                {
+                    var p = l.Split('|');
+                    if (p.Length < 4) continue;
+                    int uid = int.TryParse(p[0], out var u) ? u : 0;
+                    string login = p[1];
+                    int prodCount = int.TryParse(p[2], out var pc) ? pc : 0;
+                    decimal total = decimal.TryParse(p[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var tt) ? tt : 0m;
+                    vm.AbandonedBaskets.Add(new BasketAnalyticsItem { UserID = uid, UserLogin = login, ProductCount = prodCount, TotalAmount = total, LastActivity = DateTime.MinValue });
+                }
+                vm.TotalAbandonedBaskets = vm.AbandonedBaskets.Count;
+            }
+
+            // Reviews for products (compute average rating)
+            var allReviews = new List<ReviewAnalyticsItem>();
+            foreach (var prod in products)
+            {
+                var rresp = Models.UdpClientHelper.SendUdpMessage($"getproductreviews|{prod.ProductID}");
+                if (string.IsNullOrEmpty(rresp)) continue;
+                var lines = rresp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                int rc = 0; decimal sum = 0m;
+                foreach (var l in lines)
+                {
+                    var parts = l.Split('|');
+                    if (parts.Length < 6) continue;
+                    int rating = int.TryParse(parts[5], out var rv) ? rv : 0;
+                    rc++; sum += rating;
+                }
+                if (rc > 0)
+                {
+                    allReviews.Add(new ReviewAnalyticsItem { ProductID = prod.ProductID, ProductName = prod.ProductName, ReviewCount = rc, AverageRating = sum / rc });
+                }
+            }
+            vm.ReviewsData = allReviews;
+            vm.TotalReviews = allReviews.Sum(r => r.ReviewCount);
+            vm.AverageRating = allReviews.Any() ? allReviews.Average(r => r.AverageRating) : 0m;
+
+            return vm;
+        }
     }
 }

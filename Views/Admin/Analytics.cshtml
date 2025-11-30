@@ -1,0 +1,95 @@
+@model Kursovoi.Models.AdminAnalyticsViewModel
+@{
+    ViewData["Title"] = "Аналитика администратора";
+}
+
+<h1>Аналитика администратора</h1>
+
+<div>
+    <h3>Заказы</h3>
+    <p>Всего заказов: @Model.TotalOrders</p>
+    <p>Общий доход: @(Model.TotalRevenue.ToString("0.##") + " Br")</p>
+</div>
+
+<div>
+    <h3>Пользователи</h3>
+    <p>Активные пользователи: @Model.ActiveUsers</p>
+</div>
+
+<div>
+    <h3>Продукты</h3>
+    <p>Всего продуктов: @Model.TotalProducts</p>
+</div>
+
+<div>
+    <h3>Производительность магазинов</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Магазин</th>
+                <th>Общий доход</th>
+                <th>Средний чек</th>
+                <th>Количество заказов</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.StorePerformance)
+            {
+                <tr>
+                    <td>@item.StoreName</td>
+                    <td>@(item.TotalSales.ToString("0.##") + " Br")</td>
+                    <td>@(item.AverageOrderValue.ToString("0.##") + " Br")</td>
+                    <td>@item.OrderCount</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<div>
+    <h3>Аналитика категорий</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Категория</th>
+                <th>Количество продуктов</th>
+                <th>Количество заказов</th>
+                <th>Доход</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.CategoryAnalytics)
+            {
+                <tr>
+                    <td>@item.CategoryName</td>
+                    <td>@item.ProductCount</td>
+                    <td>@item.OrderCount</td>
+                    <td>@(item.Revenue.ToString("0.##") + " Br")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<div>
+    <h3>Динамика продаж</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Месяц</th>
+                <th>Количество заказов</th>
+                <th>Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.SalesByMonth)
+            {
+                <tr>
+                    <td>@item.Month</td>
+                    <td>@item.OrderCount</td>
+                    <td>@(item.TotalAmount.ToString("0.##") + " Br")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

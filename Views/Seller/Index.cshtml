@@ -13,6 +13,7 @@
         <li class="nav-item" role="presentation"><button class="nav-link active" id="seller-products-tab" data-bs-toggle="tab" data-bs-target="#seller-products" type="button" role="tab">Товары</button></li>
         <li class="nav-item" role="presentation"><button class="nav-link" id="seller-store-tab" data-bs-toggle="tab" data-bs-target="#seller-store" type="button" role="tab">Информация о магазине</button></li>
         <li class="nav-item" role="presentation"><button class="nav-link" id="seller-stock-tab" data-bs-toggle="tab" data-bs-target="#seller-stock" type="button" role="tab">Склад</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-analytics-tab" data-bs-toggle="tab" data-bs-target="#seller-analytics" type="button" role="tab">Аналитика</button></li>
     </ul>
 
     <div class="tab-content mt-3">
@@ -55,7 +56,7 @@
                 <input type="search" class="form-control seller-search me-2" data-target="#sellerStockTable" placeholder="Поиск по таблице..." />
                 <div>
                     <a class="btn btn-sm btn-success me-2" href="@Url.Action("AddProduct","Seller")">Добавить товар</a>
-                    <label class="btn btn-sm btn-secondary mb-0">Загрузить CSV<input id="csvFileInput" type="file" accept=".csv" hidden></label>
+                    <label class="btn btn-sm btn-secondary mb-0">Загрузить CSV<input id="csvFileInput" type="file" accept=",.csv" hidden></label>
                 </div>
                 <div class="ms-auto">Всего: <span id="sellerStockCount">@Model.Stocks.Count</span></div>
             </div>
@@ -81,6 +82,10 @@
                 }
                 </tbody>
             </table>
+        </div>
+
+        <div class="tab-pane fade" id="seller-analytics" role="tabpanel">
+            <div id="sellerAnalyticsContainer" class="p-2">Загрузка аналитики...</div>
         </div>
     </div>
 </div>
@@ -163,6 +168,20 @@
             });
         });
 
+        // when analytics tab is shown, load content once via AJAX
+        var analyticsBtn = document.getElementById('seller-analytics-tab');
+        if (analyticsBtn) {
+            analyticsBtn.addEventListener('shown.bs.tab', function(ev){
+                var container = document.getElementById('sellerAnalyticsContainer');
+                if (!container) return;
+                if (container.getAttribute('data-loaded') === '1') return;
+                fetch('/Seller/Analytics')
+                    .then(function(r){ return r.text(); })
+                    .then(function(html){ container.innerHTML = html; container.setAttribute('data-loaded','1'); attachSortableToTables(container); })
+                    .catch(function(){ container.innerHTML = '<div class="alert alert-danger">Не удалось загрузить аналитику</div>'; });
+            });
+        }
+
         // Search/filter for tables
         function filterTable(table, query) {
             query = (query || '').trim().toLowerCase();
@@ -200,7 +219,13 @@
             rows.forEach(function(r){ tbody.appendChild(r); });
         }
 
-        document.querySelectorAll('table.table-sortable thead th.sortable').forEach(function(th, idx){ th.style.cursor = 'pointer'; th._asc = true; th.addEventListener('click', function(e){ var table = th.closest('table'); var headers = Array.from(th.parentElement.children); var colIndex = headers.indexOf(th); var type = th.getAttribute('data-type') || 'text'; sortTable(table, colIndex, type, th._asc); th._asc = !th._asc; }); });
+        function attachSortableToTables(root) {
+            var rt = root || document;
+            rt.querySelectorAll('table.table-sortable thead th.sortable').forEach(function(th){ th.style.cursor = 'pointer'; th._asc = true; th.addEventListener('click', function(e){ var table = th.closest('table'); var headers = Array.from(th.parentElement.children); var colIndex = headers.indexOf(th); var type = th.getAttribute('data-type') || 'text'; sortTable(table, colIndex, type, th._asc); th._asc = !th._asc; }); });
+        }
+
+        // initial attach for tables already on page
+        attachSortableToTables(document);
 
         // Intercept stock form submissions to use AJAX and update row without full reload
         document.querySelectorAll('.stock-form').forEach(function(f){

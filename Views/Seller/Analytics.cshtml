@@ -1,0 +1,171 @@
+@model Kursovoi.Models.SellerAnalyticsViewModel
+@{
+    ViewData["Title"] = "Аналитика продавца";
+}
+
+<h1>Аналитика продавца</h1>
+
+<div>
+    <h3>Фильтры</h3>
+    <form id="analyticsFilters" class="mb-4">
+        <div class="row">
+            <div class="col-md-4">
+                <label for="startDate" class="form-label">Начальная дата</label>
+                <input type="date" id="startDate" name="startDate" class="form-control" />
+            </div>
+            <div class="col-md-4">
+                <label for="endDate" class="form-label">Конечная дата</label>
+                <input type="date" id="endDate" name="endDate" class="form-control" />
+            </div>
+            <div class="col-md-4">
+                <label for="category" class="form-label">Категория</label>
+                <select id="category" name="category" class="form-select">
+                    <option value="">Все категории</option>
+                    @foreach (var category in ViewBag.Categories as List<KeyValuePair<int, string>>)
+                    {
+                        <option value="@category.Key">@category.Value</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <button type="button" id="applyFilters" class="btn btn-primary mt-3">Применить</button>
+    </form>
+</div>
+
+<div>
+    <h3>Графики</h3>
+    <div class="row">
+        <div class="col-md-6">
+            <canvas id="ordersChart"></canvas>
+        </div>
+        <div class="col-md-6">
+            <canvas id="stockChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<div>
+    <h3>Запасы</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Продукт</th>
+                <th>Количество</th>
+                <th>Последнее обновление</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.RunningOutProducts)
+            {
+                <tr>
+                    <td>@item.ProductName</td>
+                    <td>@item.Quantity</td>
+                    <td>@item.LastUpdate</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<div>
+    <h3>Заказы</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Период</th>
+                <th>Количество заказов</th>
+                <th>Общая сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.OrdersByDay)
+            {
+                <tr>
+                    <td>@item.Period</td>
+                    <td>@item.OrderCount</td>
+                    <td>@(item.TotalAmount.ToString("0.##") + " Br")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<div>
+    <h3>Лучшие продукты</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Продукт</th>
+                <th>Количество продаж</th>
+                <th>Доход</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.TopSellingProducts)
+            {
+                <tr>
+                    <td>@item.ProductName</td>
+                    <td>@item.QuantitySold</td>
+                    <td>@(item.Revenue.ToString("0.##") + " Br")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const ordersChartCtx = document.getElementById('ordersChart').getContext('2d');
+        const stockChartCtx = document.getElementById('stockChart').getContext('2d');
+
+        const ordersChart = new Chart(ordersChartCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Количество заказов',
+                    data: [],
+                    borderColor: 'blue',
+                    fill: false
+                }]
+            }
+        });
+
+        const stockChart = new Chart(stockChartCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Количество на складе',
+                    data: [],
+                    backgroundColor: 'orange'
+                }]
+            }
+        });
+
+        document.getElementById('applyFilters').addEventListener('click', function () {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const category = document.getElementById('category').value;
+
+            fetch(`/Seller/GetSellerAnalytics?startDate=${startDate}&endDate=${endDate}&categoryId=${category}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Update charts and tables with new data
+                    ordersChart.data.labels = data.OrdersByDay.map(o => o.Period);
+                    ordersChart.data.datasets[0].data = data.OrdersByDay.map(o => o.OrderCount);
+                    ordersChart.update();
+
+                    stockChart.data.labels = data.RunningOutProducts.map(p => p.ProductName);
+                    stockChart.data.datasets[0].data = data.RunningOutProducts.map(p => p.Quantity);
+                    stockChart.update();
+
+                    // update tables directly where necessary
+                    // For brevity we rely on reload to show changed data in tables if needed
+                });
+        });
+    });
+</script>
+}

@@ -1,0 +1,76 @@
+@model Kursovoi.Models.AddProductViewModel
+@{
+    ViewData["Title"] = "Добавить товар";
+    var cats = ViewData["Categories"] as List<KeyValuePair<int,string>> ?? new List<KeyValuePair<int,string>>();
+    var mans = ViewData["Manufacturers"] as List<KeyValuePair<int,string>> ?? new List<KeyValuePair<int,string>>();
+    var stores = ViewData["Stores"] as List<KeyValuePair<int,string>> ?? new List<KeyValuePair<int,string>>();
+}
+
+<h2>Добавить товар (Админ)</h2>
+
+@if (TempData["AddProductMsg"] != null)
+{
+    <div class="alert alert-success">@TempData["AddProductMsg"]</div>
+}
+
+<form method="post" enctype="multipart/form-data" class="mt-3">
+    @Html.AntiForgeryToken()
+    @Html.ValidationSummary(true, "", new { @class = "text-danger" })
+
+    <div class="mb-2">
+        <label class="form-label">Магазин <span class="text-danger">*</span></label>
+        <select name="StoreId" class="form-select" required>
+            <option value="">-- Выберите магазин --</option>
+            @foreach(var s in stores) { <option value="@s.Key">@s.Value</option>; }
+        </select>
+    </div>
+
+    <div class="mb-2">
+        <label class="form-label">Название товара</label>
+        <input name="ProductName" class="form-control" value="@Model.ProductName" required />
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Категория</label>
+        <select name="CategoryId" class="form-select" required>
+            <option value="">-- Выберите --</option>
+            @foreach(var c in cats) { <option value="@c.Key">@c.Value</option>; }
+        </select>
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Производитель</label>
+        <select name="ManufacturerId" class="form-select" required>
+            <option value="">-- Выберите --</option>
+            @foreach(var m in mans) { <option value="@m.Key">@m.Value</option>; }
+        </select>
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Описание</label>
+        <textarea name="Description" class="form-control" rows="3">@Model.Description</textarea>
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Цена</label>
+        <input type="number" step="0.01" name="Price" class="form-control" value="@Model.Price" required />
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Скидка (%)</label>
+        <input type="number" step="0.01" name="Discount" class="form-control" value="@Model.Discount" />
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Количество на складе</label>
+        <input type="number" name="Quantity" class="form-control" value="@Model.Quantity" required />
+    </div>
+    <div class="mb-2">
+        <label class="form-label">Изображение</label>
+        <input type="file" name="imageFile" class="form-control" accept="image/*" />
+        <small class="form-text text-muted">Или укажите URL изображения ниже</small>
+    </div>
+    <div class="mb-2">
+        <label class="form-label">URL изображения</label>
+        <input name="ImageUrl" class="form-control" value="@Model.ImageUrl" placeholder="/Images/product.jpg" />
+    </div>
+    <div class="mb-3">
+        <button type="submit" class="btn btn-primary">Добавить товар</button>
+        <a href="@Url.Action("Index","Admin")" class="btn btn-secondary">Отмена</a>
+    </div>
+</form>
+
