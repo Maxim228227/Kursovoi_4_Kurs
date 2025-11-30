@@ -42,8 +42,12 @@
                             }
                         </div>
                         <div class="card-actions">
-                            <a class="btn btn-sm primary" href="#">В корзину</a>
-                            <a class="btn btn-sm btn-outline-secondary" href="#">Подробнее</a>
+                            <form method="post" asp-controller="Cart" asp-action="Add" class="d-inline add-to-cart-form">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="productId" value="@p.ProductID" />
+                                <button type="submit" class="btn btn-sm btn-outline-primary add-to-cart-btn">В корзину</button>
+                            </form>
+                            <a class="btn btn-sm btn-outline-secondary" asp-controller="Home" asp-action="Details" asp-route-id="@p.ProductID">Подробнее</a>
                         </div>
                     </div>
                 </div>

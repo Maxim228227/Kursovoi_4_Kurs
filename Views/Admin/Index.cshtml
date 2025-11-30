@@ -63,7 +63,7 @@
           <td>@p.StoreName</td>
           <td>@p.Price</td>
           <td>@p.Quantity</td>
-          <td class="prod-status">@(p.Status ? "Активен" : "Заблокирован")</td>
+                        <td class="prod-status">@(p.Status ? "Активен" : "Заблокирован")</td>
           <td>
             <button class="btn btn-sm toggle-status-btn @(p.Status ? "btn-outline-danger" : "btn-outline-success")" data-product-id="@p.ProductID" data-new-status="@(p.Status ? "0" : "1")">@(p.Status ? "Заблокировать" : "Разблокировать")</button>
           </td>
@@ -103,9 +103,9 @@
           <td>@s.Address</td>
           <td>@s.City</td>
           <td>@s.Phone</td>
-          <td class="store-status">@(s.Status ? "Активен" : "Заблокирован")</td>
+                        <td class="store-status">@(s.Status ? "Заблокирован" : "Активен")</td>
           <td>
-            <button class="btn btn-sm toggle-store-status-btn @(s.Status ? "btn-outline-danger" : "btn-outline-success")" data-store-id="@s.StoreID" data-new-status="@(s.Status ? "0" : "1")">@(s.Status ? "Заблокировать" : "Разблокировать")</button>
+        <button class="btn btn-sm toggle-store-status-btn @(s.Status ? "btn-outline-success" : "btn-outline-danger")" data-store-id="@s.StoreID" data-new-status="@(s.Status ? "0" : "1")">@(s.Status ? "Разблокировать" : "Заблокировать")</button>
           </td>
         </tr>
       }

@@ -20,10 +20,14 @@ namespace Kursovoi.Controllers
                     foreach (var line in lines)
                     {
                         var parts = line.Split('|');
-                        if (parts.Length < 7) continue; // expect status at index 6
+                        if (parts.Length < 2) continue;
 
+                        // status is expected to be the last column; handle both old (7 cols) and new (8 cols) formats
                         bool status = false;
-                        if (parts.Length > 6) bool.TryParse(parts[6], out status);
+                        var last = parts[parts.Length - 1];
+                        if (string.Equals(last, "1", System.StringComparison.OrdinalIgnoreCase) || string.Equals(last, "true", System.StringComparison.OrdinalIgnoreCase)) status = true;
+                        else if (string.Equals(last, "0", System.StringComparison.OrdinalIgnoreCase) || string.Equals(last, "false", System.StringComparison.OrdinalIgnoreCase)) status = false;
+                        else bool.TryParse(last, out status);
 
                         // status == true means ACTIVE in DB; only show active stores to customers
                         if (!status) continue;
@@ -31,11 +35,11 @@ namespace Kursovoi.Controllers
                         var vm = new StoreViewModel
                         {
                             StoreID = int.TryParse(parts[0], out var id) ? id : 0,
-                            StoreName = parts[1],
-                            Address = parts[2],
-                            City = parts[3],
-                            Phone = parts[4],
-                            LegalPerson = parts[5],
+                            StoreName = parts.Length > 1 ? parts[1] : string.Empty,
+                            Address = parts.Length > 2 ? parts[2] : string.Empty,
+                            City = parts.Length > 3 ? parts[3] : string.Empty,
+                            Phone = parts.Length > 4 ? parts[4] : string.Empty,
+                            LegalPerson = parts.Length > 5 ? parts[5] : string.Empty,
                             Status = status
                         };
                         list.Add(vm);
@@ -63,6 +67,7 @@ namespace Kursovoi.Controllers
         {
             // find store name by id and ensure store is active
             string storeName = null;
+            int storeId = id;
             try
             {
                 var resp = UdpClientHelper.SendUdpMessage("getallstores");
@@ -77,7 +82,7 @@ namespace Kursovoi.Controllers
                         {
                             bool status = true;
                             if (parts.Length > 6) bool.TryParse(parts[6], out status);
-                            if (!status) { storeName = null; break; } // store is frozen
+                            if (status) { storeName = null; break; } // store is frozen
                             storeName = parts[1];
                             break;
                         }
@@ -94,7 +99,7 @@ namespace Kursovoi.Controllers
                 return NotFound();
             }
 
-            // fetch all products and filter by store name and only active products
+            // fetch all products and filter by store ID or store name and only active products
             var products = new List<ProductViewModel>();
             try
             {
@@ -105,7 +110,7 @@ namespace Kursovoi.Controllers
                     foreach (var line in lines)
                     {
                         var parts = line.Split('|');
-                        // expect at least 19 parts including product status at index 18
+                        // expect at least 19 parts including product status
                         if (parts.Length < 19) continue;
                         try
                         {
@@ -125,6 +130,11 @@ namespace Kursovoi.Controllers
                             {
                                 imageUrl = "/Images/placeholder.svg";
                             }
+
+                            // StoreID: если есть 20 столбцов, берем из 19-го, иначе ищем по имени магазина
+                            int productStoreId = 0;
+                            if (parts.Length > 19)
+                                productStoreId = int.TryParse(parts[19], out var psid) ? psid : 0;
 
                             var vm = new ProductViewModel
                             {
@@ -147,7 +157,8 @@ namespace Kursovoi.Controllers
                                 ImageUrl = imageUrl
                             };
 
-                            if (string.Equals(vm.StoreName ?? string.Empty, storeName, System.StringComparison.OrdinalIgnoreCase))
+                            // Если StoreID совпадает или имя магазина совпадает
+                            if ((productStoreId == storeId) || (string.Equals(vm.StoreName ?? string.Empty, storeName, System.StringComparison.OrdinalIgnoreCase)))
                             {
                                 products.Add(vm);
                             }
