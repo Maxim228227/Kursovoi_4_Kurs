@@ -1,0 +1,443 @@
+USE [master]
+GO
+/****** Object:  Database [ProductCatalog]    Script Date: 02.12.2025 20:56:24 ******/
+CREATE DATABASE [ProductCatalog]
+ CONTAINMENT = NONE
+ ON  PRIMARY 
+( NAME = N'ProductCatalog', FILENAME = N'C:\Program Files\Microsoft SQL Server\MSSQL16.TOPMIX\MSSQL\DATA\ProductCatalog.mdf' , SIZE = 8192KB , MAXSIZE = UNLIMITED, FILEGROWTH = 65536KB )
+ LOG ON 
+( NAME = N'ProductCatalog_log', FILENAME = N'C:\Program Files\Microsoft SQL Server\MSSQL16.TOPMIX\MSSQL\DATA\ProductCatalog_log.ldf' , SIZE = 8192KB , MAXSIZE = 2048GB , FILEGROWTH = 65536KB )
+ WITH CATALOG_COLLATION = DATABASE_DEFAULT, LEDGER = OFF
+GO
+ALTER DATABASE [ProductCatalog] SET COMPATIBILITY_LEVEL = 160
+GO
+IF (1 = FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'))
+begin
+EXEC [ProductCatalog].[dbo].[sp_fulltext_database] @action = 'enable'
+end
+GO
+ALTER DATABASE [ProductCatalog] SET ANSI_NULL_DEFAULT OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET ANSI_NULLS OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET ANSI_PADDING OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET ANSI_WARNINGS OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET ARITHABORT OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET AUTO_CLOSE OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET AUTO_SHRINK OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET AUTO_UPDATE_STATISTICS ON 
+GO
+ALTER DATABASE [ProductCatalog] SET CURSOR_CLOSE_ON_COMMIT OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET CURSOR_DEFAULT  GLOBAL 
+GO
+ALTER DATABASE [ProductCatalog] SET CONCAT_NULL_YIELDS_NULL OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET NUMERIC_ROUNDABORT OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET QUOTED_IDENTIFIER OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET RECURSIVE_TRIGGERS OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET  DISABLE_BROKER 
+GO
+ALTER DATABASE [ProductCatalog] SET AUTO_UPDATE_STATISTICS_ASYNC OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET DATE_CORRELATION_OPTIMIZATION OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET TRUSTWORTHY OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET ALLOW_SNAPSHOT_ISOLATION OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET PARAMETERIZATION SIMPLE 
+GO
+ALTER DATABASE [ProductCatalog] SET READ_COMMITTED_SNAPSHOT OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET HONOR_BROKER_PRIORITY OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET RECOVERY FULL 
+GO
+ALTER DATABASE [ProductCatalog] SET  MULTI_USER 
+GO
+ALTER DATABASE [ProductCatalog] SET PAGE_VERIFY CHECKSUM  
+GO
+ALTER DATABASE [ProductCatalog] SET DB_CHAINING OFF 
+GO
+ALTER DATABASE [ProductCatalog] SET FILESTREAM( NON_TRANSACTED_ACCESS = OFF ) 
+GO
+ALTER DATABASE [ProductCatalog] SET TARGET_RECOVERY_TIME = 60 SECONDS 
+GO
+ALTER DATABASE [ProductCatalog] SET DELAYED_DURABILITY = DISABLED 
+GO
+ALTER DATABASE [ProductCatalog] SET ACCELERATED_DATABASE_RECOVERY = OFF  
+GO
+EXEC sys.sp_db_vardecimal_storage_format N'ProductCatalog', N'ON'
+GO
+ALTER DATABASE [ProductCatalog] SET QUERY_STORE = ON
+GO
+ALTER DATABASE [ProductCatalog] SET QUERY_STORE (OPERATION_MODE = READ_WRITE, CLEANUP_POLICY = (STALE_QUERY_THRESHOLD_DAYS = 30), DATA_FLUSH_INTERVAL_SECONDS = 900, INTERVAL_LENGTH_MINUTES = 60, MAX_STORAGE_SIZE_MB = 1000, QUERY_CAPTURE_MODE = AUTO, SIZE_BASED_CLEANUP_MODE = AUTO, MAX_PLANS_PER_QUERY = 200, WAIT_STATS_CAPTURE_MODE = ON)
+GO
+USE [ProductCatalog]
+GO
+/****** Object:  Table [dbo].[Basket]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Basket](
+	[BasketID] [int] IDENTITY(1,1) NOT NULL,
+	[UserID] [int] NOT NULL,
+	[ProductID] [int] NOT NULL,
+	[Quantity] [int] NOT NULL,
+ CONSTRAINT [PK_BasketID] PRIMARY KEY CLUSTERED 
+(
+	[BasketID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Categories]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Categories](
+	[CategoryID] [int] IDENTITY(1,1) NOT NULL,
+	[CategoryName] [nvarchar](200) NOT NULL,
+ CONSTRAINT [PK_Categories] PRIMARY KEY CLUSTERED 
+(
+	[CategoryID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Manufacturers]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Manufacturers](
+	[ManufacturerID] [int] IDENTITY(1,1) NOT NULL,
+	[ManufacturerName] [nvarchar](200) NOT NULL,
+	[Country] [nvarchar](100) NOT NULL,
+ CONSTRAINT [PK_Manufacturers] PRIMARY KEY CLUSTERED 
+(
+	[ManufacturerID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Order]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Order](
+	[OrderID] [int] IDENTITY(1,1) NOT NULL,
+	[UserID] [int] NOT NULL,
+	[ProductID] [int] NOT NULL,
+	[CreatedAt] [date] NULL,
+	[Status] [nvarchar](max) NULL,
+	[TotalAmount] [decimal](10, 2) NULL,
+	[PaymentMethod] [nvarchar](100) NULL,
+	[DeliveryAddress] [nvarchar](max) NULL,
+	[StoreID] [int] NULL,
+ CONSTRAINT [PK_Order] PRIMARY KEY CLUSTERED 
+(
+	[OrderID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Prices]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Prices](
+	[PriceID] [int] IDENTITY(1,1) NOT NULL,
+	[ProductID] [int] NOT NULL,
+	[Price] [decimal](10, 2) NOT NULL,
+	[Discount] [decimal](10, 2) NOT NULL,
+ CONSTRAINT [PK_Prices] PRIMARY KEY CLUSTERED 
+(
+	[PriceID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[ProductHistory]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ProductHistory](
+	[HistoryID] [int] IDENTITY(1,1) NOT NULL,
+	[ProductID] [int] NOT NULL,
+	[ChangedField] [nvarchar](200) NOT NULL,
+	[OldValue] [nvarchar](max) NOT NULL,
+	[NewValue] [nvarchar](max) NOT NULL,
+	[UserID] [int] NOT NULL,
+	[ChangedAt] [datetime] NOT NULL,
+ CONSTRAINT [PK_ProductHistory] PRIMARY KEY CLUSTERED 
+(
+	[HistoryID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[ProductImages]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ProductImages](
+	[ImageID] [int] IDENTITY(1,1) NOT NULL,
+	[ProductID] [int] NOT NULL,
+	[ImageUrl] [nvarchar](500) NOT NULL,
+	[IsMain] [bit] NOT NULL,
+ CONSTRAINT [PK_ProductImages] PRIMARY KEY CLUSTERED 
+(
+	[ImageID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[ProductRatings]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ProductRatings](
+	[RatingID] [int] NOT NULL,
+	[ProductID] [int] NOT NULL,
+	[UserID] [int] NOT NULL,
+	[Rating] [int] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+ CONSTRAINT [PK_ProductRatings] PRIMARY KEY CLUSTERED 
+(
+	[RatingID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[ProductReviews]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ProductReviews](
+	[ReviewID] [int] IDENTITY(1,1) NOT NULL,
+	[ProductID] [int] NOT NULL,
+	[UserID] [int] NOT NULL,
+	[Title] [nvarchar](200) NULL,
+	[ReviewText] [nvarchar](max) NULL,
+	[Rating] [int] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[IsApproved] [bit] NOT NULL,
+ CONSTRAINT [PK_ProductReviews] PRIMARY KEY CLUSTERED 
+(
+	[ReviewID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Products]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Products](
+	[ProductID] [int] IDENTITY(1,1) NOT NULL,
+	[ProductName] [nvarchar](250) NOT NULL,
+	[CategoryID] [int] NOT NULL,
+	[ManufacturerID] [int] NOT NULL,
+	[Description] [nvarchar](max) NOT NULL,
+	[IsActive] [bit] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[UpdatedAt] [datetime] NOT NULL,
+	[StoreID] [int] NOT NULL,
+	[Price] [decimal](10, 2) NULL,
+	[Discount] [decimal](10, 2) NULL,
+	[Status] [bit] NOT NULL,
+ CONSTRAINT [PK_Products] PRIMARY KEY CLUSTERED 
+(
+	[ProductID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Roles]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Roles](
+	[RoleID] [int] IDENTITY(1,1) NOT NULL,
+	[RoleName] [nvarchar](100) NOT NULL,
+	[Description] [nvarchar](max) NOT NULL,
+ CONSTRAINT [PK_Roles] PRIMARY KEY CLUSTERED 
+(
+	[RoleID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Stocks]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Stocks](
+	[StoctID] [int] IDENTITY(1,1) NOT NULL,
+	[ProductID] [int] NOT NULL,
+	[StoreID] [int] NOT NULL,
+	[Quantity] [int] NOT NULL,
+	[LastUpdate] [datetime] NOT NULL,
+ CONSTRAINT [PK_Stocks] PRIMARY KEY CLUSTERED 
+(
+	[StoctID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Stores]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Stores](
+	[StoreID] [int] IDENTITY(1,1) NOT NULL,
+	[StoreName] [nvarchar](200) NOT NULL,
+	[Address] [nvarchar](300) NOT NULL,
+	[City] [nvarchar](100) NOT NULL,
+	[Phone] [nvarchar](50) NOT NULL,
+	[LegalPerson] [nvarchar](50) NOT NULL,
+	[Status] [bit] NOT NULL,
+	[RegistrationDate] [datetime] NULL,
+ CONSTRAINT [PK_Stores] PRIMARY KEY CLUSTERED 
+(
+	[StoreID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+/****** Object:  Table [dbo].[Users]    Script Date: 02.12.2025 20:56:25 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Users](
+	[UserID] [int] IDENTITY(1,1) NOT NULL,
+	[Login] [nvarchar](100) NOT NULL,
+	[PasswordHash] [nvarchar](500) NOT NULL,
+	[RoleID] [int] NOT NULL,
+	[StoreID] [int] NULL,
+	[IsActive] [bit] NOT NULL,
+	[Phone] [nchar](20) NOT NULL,
+ CONSTRAINT [PK_Users] PRIMARY KEY CLUSTERED 
+(
+	[UserID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[Products] ADD  DEFAULT ((1)) FOR [Status]
+GO
+ALTER TABLE [dbo].[Stores] ADD  DEFAULT ((1)) FOR [Status]
+GO
+ALTER TABLE [dbo].[Basket]  WITH CHECK ADD  CONSTRAINT [FK_Basket_Products] FOREIGN KEY([ProductID])
+REFERENCES [dbo].[Products] ([ProductID])
+GO
+ALTER TABLE [dbo].[Basket] CHECK CONSTRAINT [FK_Basket_Products]
+GO
+ALTER TABLE [dbo].[Basket]  WITH CHECK ADD  CONSTRAINT [FK_Basket_Users] FOREIGN KEY([UserID])
+REFERENCES [dbo].[Users] ([UserID])
+GO
+ALTER TABLE [dbo].[Basket] CHECK CONSTRAINT [FK_Basket_Users]
+GO
+ALTER TABLE [dbo].[Order]  WITH CHECK ADD  CONSTRAINT [FK_Order_Products] FOREIGN KEY([ProductID])
+REFERENCES [dbo].[Products] ([ProductID])
+GO
+ALTER TABLE [dbo].[Order] CHECK CONSTRAINT [FK_Order_Products]
+GO
+ALTER TABLE [dbo].[Order]  WITH CHECK ADD  CONSTRAINT [FK_Order_Stores] FOREIGN KEY([StoreID])
+REFERENCES [dbo].[Stores] ([StoreID])
+GO
+ALTER TABLE [dbo].[Order] CHECK CONSTRAINT [FK_Order_Stores]
+GO
+ALTER TABLE [dbo].[Order]  WITH CHECK ADD  CONSTRAINT [FK_Order_Users] FOREIGN KEY([UserID])
+REFERENCES [dbo].[Users] ([UserID])
+GO
+ALTER TABLE [dbo].[Order] CHECK CONSTRAINT [FK_Order_Users]
+GO
+ALTER TABLE [dbo].[Prices]  WITH CHECK ADD  CONSTRAINT [FK_Prices_Products] FOREIGN KEY([ProductID])
+REFERENCES [dbo].[Products] ([ProductID])
+GO
+ALTER TABLE [dbo].[Prices] CHECK CONSTRAINT [FK_Prices_Products]
+GO
+ALTER TABLE [dbo].[ProductHistory]  WITH CHECK ADD  CONSTRAINT [FK_ProductHistory_Products] FOREIGN KEY([ProductID])
+REFERENCES [dbo].[Products] ([ProductID])
+GO
+ALTER TABLE [dbo].[ProductHistory] CHECK CONSTRAINT [FK_ProductHistory_Products]
+GO
+ALTER TABLE [dbo].[ProductHistory]  WITH CHECK ADD  CONSTRAINT [FK_ProductHistory_Users] FOREIGN KEY([UserID])
+REFERENCES [dbo].[Users] ([UserID])
+GO
+ALTER TABLE [dbo].[ProductHistory] CHECK CONSTRAINT [FK_ProductHistory_Users]
+GO
+ALTER TABLE [dbo].[ProductImages]  WITH CHECK ADD  CONSTRAINT [FK_ProductImages_Products] FOREIGN KEY([ProductID])
+REFERENCES [dbo].[Products] ([ProductID])
+GO
+ALTER TABLE [dbo].[ProductImages] CHECK CONSTRAINT [FK_ProductImages_Products]
+GO
+ALTER TABLE [dbo].[ProductRatings]  WITH CHECK ADD  CONSTRAINT [FK_ProductRatings_Products] FOREIGN KEY([ProductID])
+REFERENCES [dbo].[Products] ([ProductID])
+GO
+ALTER TABLE [dbo].[ProductRatings] CHECK CONSTRAINT [FK_ProductRatings_Products]
+GO
+ALTER TABLE [dbo].[ProductRatings]  WITH CHECK ADD  CONSTRAINT [FK_ProductRatings_Users] FOREIGN KEY([UserID])
+REFERENCES [dbo].[Users] ([UserID])
+GO
+ALTER TABLE [dbo].[ProductRatings] CHECK CONSTRAINT [FK_ProductRatings_Users]
+GO
+ALTER TABLE [dbo].[ProductReviews]  WITH CHECK ADD  CONSTRAINT [FK_ProductReviews_Products] FOREIGN KEY([ProductID])
+REFERENCES [dbo].[Products] ([ProductID])
+GO
+ALTER TABLE [dbo].[ProductReviews] CHECK CONSTRAINT [FK_ProductReviews_Products]
+GO
+ALTER TABLE [dbo].[ProductReviews]  WITH CHECK ADD  CONSTRAINT [FK_ProductReviews_Users] FOREIGN KEY([UserID])
+REFERENCES [dbo].[Users] ([UserID])
+GO
+ALTER TABLE [dbo].[ProductReviews] CHECK CONSTRAINT [FK_ProductReviews_Users]
+GO
+ALTER TABLE [dbo].[Products]  WITH CHECK ADD  CONSTRAINT [FK_Products_Categories] FOREIGN KEY([CategoryID])
+REFERENCES [dbo].[Categories] ([CategoryID])
+GO
+ALTER TABLE [dbo].[Products] CHECK CONSTRAINT [FK_Products_Categories]
+GO
+ALTER TABLE [dbo].[Products]  WITH CHECK ADD  CONSTRAINT [FK_Products_Manufacturers] FOREIGN KEY([ManufacturerID])
+REFERENCES [dbo].[Manufacturers] ([ManufacturerID])
+GO
+ALTER TABLE [dbo].[Products] CHECK CONSTRAINT [FK_Products_Manufacturers]
+GO
+ALTER TABLE [dbo].[Products]  WITH CHECK ADD  CONSTRAINT [FK_Products_Stores] FOREIGN KEY([StoreID])
+REFERENCES [dbo].[Stores] ([StoreID])
+GO
+ALTER TABLE [dbo].[Products] CHECK CONSTRAINT [FK_Products_Stores]
+GO
+ALTER TABLE [dbo].[Stocks]  WITH CHECK ADD  CONSTRAINT [FK_Stocks_Products] FOREIGN KEY([ProductID])
+REFERENCES [dbo].[Products] ([ProductID])
+GO
+ALTER TABLE [dbo].[Stocks] CHECK CONSTRAINT [FK_Stocks_Products]
+GO
+ALTER TABLE [dbo].[Stocks]  WITH CHECK ADD  CONSTRAINT [FK_Stocks_Stores] FOREIGN KEY([StoreID])
+REFERENCES [dbo].[Stores] ([StoreID])
+GO
+ALTER TABLE [dbo].[Stocks] CHECK CONSTRAINT [FK_Stocks_Stores]
+GO
+ALTER TABLE [dbo].[Users]  WITH CHECK ADD  CONSTRAINT [FK_Users_Roles] FOREIGN KEY([RoleID])
+REFERENCES [dbo].[Roles] ([RoleID])
+GO
+ALTER TABLE [dbo].[Users] CHECK CONSTRAINT [FK_Users_Roles]
+GO
+ALTER TABLE [dbo].[Users]  WITH CHECK ADD  CONSTRAINT [FK_Users_Stores] FOREIGN KEY([StoreID])
+REFERENCES [dbo].[Stores] ([StoreID])
+GO
+ALTER TABLE [dbo].[Users] CHECK CONSTRAINT [FK_Users_Stores]
+GO
+USE [master]
+GO
+ALTER DATABASE [ProductCatalog] SET  READ_WRITE 
+GO

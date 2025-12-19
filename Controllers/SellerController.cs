@@ -14,6 +14,12 @@ namespace Kursovoi.Controllers
     [Authorize(Roles = "seller")]
     public class SellerController : Controller
     {
+        private readonly DbHelperClient _db;
+        public SellerController(DbHelperClient db)
+        {
+            _db = db;
+        }
+
         // GET: /Seller/Index
         public IActionResult Index()
         {
@@ -118,9 +124,23 @@ namespace Kursovoi.Controllers
             // fetch categories and manufacturers to ViewData
             ViewData["Categories"] = GetCategories();
             ViewData["Manufacturers"] = GetManufacturers();
-            // pass seller's store id and name so client can include it in form
-            ViewData["StoreId"] = GetSellerStoreId();
-            ViewData["StoreName"] = GetSellerStoreName();
+
+            // pass seller's store options (may be zero, one or many)
+            var storeIds = _db.GetStoreIdsForUser(User?.Identity?.Name ?? string.Empty);
+            var storeOptions = new List<KeyValuePair<int,string>>();
+            // get store names from UDP and map
+            var storesResp = Models.UdpClientHelper.SendUdpMessage("getallstores");
+            var storeMap = ParseStores(storesResp).ToDictionary(s => s.StoreID, s => s.StoreName);
+            foreach (var sid in storeIds)
+            {
+                var name = storeMap.ContainsKey(sid) ? storeMap[sid] : sid.ToString();
+                storeOptions.Add(new KeyValuePair<int,string>(sid, name));
+            }
+            ViewData["StoreOptions"] = storeOptions;
+
+            // for compatibility, set StoreId/StoreName for single-store users
+            ViewData["StoreId"] = storeIds.Count == 1 ? storeIds[0] : 0;
+            ViewData["StoreName"] = storeIds.Count == 1 && storeOptions.Count>0 ? storeOptions[0].Value : string.Empty;
             return View(vm);
         }
 
@@ -132,15 +152,60 @@ namespace Kursovoi.Controllers
             {
                 ViewData["Categories"] = GetCategories();
                 ViewData["Manufacturers"] = GetManufacturers();
-                ViewData["StoreId"] = GetSellerStoreId();
-                ViewData["StoreName"] = GetSellerStoreName();
+                // restore store options
+                var storeIds = _db.GetStoreIdsForUser(User?.Identity?.Name ?? string.Empty);
+                var storeOptions = BuildStoreOptions(storeIds);
+                ViewData["StoreOptions"] = storeOptions;
+                ViewData["StoreId"] = storeIds.Count == 1 ? storeIds[0] : 0;
+                ViewData["StoreName"] = storeOptions.FirstOrDefault().Value ?? string.Empty;
+
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+                {
+                    var errors = ModelState.Where(kv => kv.Value.Errors.Count > 0).ToDictionary(kv => kv.Key, kv => kv.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                    return Json(new { success = false, errors = errors });
+                }
+
                 return View(model);
             }
 
-            // prefer StoreId posted from client, fallback to server lookup
+            // get seller's associated stores
+            var sellerStoreIds = _db.GetStoreIdsForUser(User?.Identity?.Name ?? string.Empty);
+
+            // prefer StoreId posted from client
             int storeId = 0;
             if (Request.HasFormContentType && int.TryParse(Request.Form["StoreId"], out var fid)) storeId = fid;
-            if (storeId == 0) storeId = GetSellerStoreId();
+
+            // Validation: determine effective storeId according to rules
+            if (sellerStoreIds.Count == 0)
+            {
+                // user has no stores
+                ModelState.AddModelError(string.Empty, "У вас не привязан ни один магазин. Обратитесь к администратору или укажите StoreID явно.");
+
+                ViewData["Categories"] = GetCategories();
+                ViewData["Manufacturers"] = GetManufacturers();
+                ViewData["StoreOptions"] = BuildStoreOptions(sellerStoreIds);
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest") return Json(new { success = false, errors = ModelState });
+                return View(model);
+            }
+            else if (sellerStoreIds.Count == 1)
+            {
+                // single store: use it regardless of posted value
+                storeId = sellerStoreIds[0];
+            }
+            else
+            {
+                // multiple stores: require explicit storeId and verify access
+                if (storeId <= 0 || !sellerStoreIds.Contains(storeId))
+                {
+                    ModelState.AddModelError(string.Empty, "У вас несколько магазинов. Укажите StoreID, к которому вы хотите добавить товар.");
+
+                    ViewData["Categories"] = GetCategories();
+                    ViewData["Manufacturers"] = GetManufacturers();
+                    ViewData["StoreOptions"] = BuildStoreOptions(sellerStoreIds);
+                    if (Request.Headers["X-Requested-With"] == "XMLHttpRequest") return Json(new { success = false, errors = ModelState });
+                    return View(model);
+                }
+            }
 
             // Handle uploaded image file
             if (imageFile != null && imageFile.Length > 0)
@@ -167,34 +232,65 @@ namespace Kursovoi.Controllers
                     ModelState.AddModelError(string.Empty, "Ошибка при сохранении файла изображения: " + ex.Message);
                     ViewData["Categories"] = GetCategories();
                     ViewData["Manufacturers"] = GetManufacturers();
+                    ViewData["StoreOptions"] = BuildStoreOptions(sellerStoreIds);
                     ViewData["StoreId"] = storeId;
                     ViewData["StoreName"] = GetSellerStoreName();
+
+                    if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+                    {
+                        return Json(new { success = false, error = ex.Message });
+                    }
+
                     return View(model);
                 }
             }
 
-            var cmd = $"addproduct|{User?.Identity?.Name ?? string.Empty}|{EscapePipe(model.ProductName)}|{model.CategoryId}|{model.ManufacturerId}|{EscapePipe(model.Description)}|{model.Price.ToString(CultureInfo.InvariantCulture)}|{model.Discount.ToString(CultureInfo.InvariantCulture)}|{model.Quantity}|{EscapePipe(model.ImageUrl)}|{storeId}";
             try
             {
-                var resp = Models.UdpClientHelper.SendUdpMessage(cmd);
-                if (!string.IsNullOrEmpty(resp) && resp.Trim().ToUpper() == "OK")
+                // Try to add directly via DB from web app (preferred)
+                bool addedViaDb = false;
+                try
                 {
-                    TempData["AddProductMsg"] = "Товар добавлен";
+                    addedViaDb = _db.AddProductToDb(model.ProductName, model.CategoryId, model.ManufacturerId, model.Description, model.Price, model.Discount, model.Quantity, model.ImageUrl, storeId);
+                }
+                catch { addedViaDb = false; }
+
+                if (addedViaDb)
+                {
+                    TempData["AddProductMsg"] = "Товар добавлен (DB).";
+                    if (Request.Headers["X-Requested-With"] == "XMLHttpRequest") return Json(new { success = true });
                     return RedirectToAction("Index");
                 }
 
-                // show server response as error
-                ModelState.AddModelError(string.Empty, "Сервер: " + (resp ?? "(пустой ответ)"));
+                // fallback to UDP
+                var resp = Models.UdpClientHelper.SendUdpMessage($"addproduct|{User?.Identity?.Name ?? string.Empty}|{EscapePipe(model.ProductName)}|{model.CategoryId}|{model.ManufacturerId}|{EscapePipe(model.Description)}|{model.Price.ToString(CultureInfo.InvariantCulture)}|{model.Discount.ToString(CultureInfo.InvariantCulture)}|{model.Quantity}|{EscapePipe(model.ImageUrl)}|{storeId}");
+                if (!string.IsNullOrEmpty(resp) && resp.Trim().ToUpper() == "OK")
+                {
+                    TempData["AddProductMsg"] = "Товар добавлен (UDP).";
+                    if (Request.Headers["X-Requested-With"] == "XMLHttpRequest") return Json(new { success = true });
+                    return RedirectToAction("Index");
+                }
+
+                var err = !string.IsNullOrEmpty(_db?.LastError) ? _db.LastError : (resp ?? "(неизвестный ответ)");
+                ModelState.AddModelError(string.Empty, "Ошибка при добавлении: " + err);
             }
             catch (System.Exception ex)
             {
-                ModelState.AddModelError(string.Empty, "Ошибка при отправке на сервер: " + ex.Message);
+                ModelState.AddModelError(string.Empty, "Ошибка при добавлении товара: " + ex.Message);
             }
 
             ViewData["Categories"] = GetCategories();
             ViewData["Manufacturers"] = GetManufacturers();
+            ViewData["StoreOptions"] = BuildStoreOptions(_db.GetStoreIdsForUser(User?.Identity?.Name ?? string.Empty));
             ViewData["StoreId"] = storeId;
             ViewData["StoreName"] = GetSellerStoreName();
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                var errors = ModelState.Where(kv => kv.Value.Errors.Count > 0).ToDictionary(kv => kv.Key, kv => kv.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                return Json(new { success = false, errors = errors });
+            }
+
             return View(model);
         }
 
@@ -203,9 +299,14 @@ namespace Kursovoi.Controllers
         public IActionResult AddProductFromCsv(AddProductViewModel model)
         {
             if (model == null) return Json(new { success = false });
+            // determine store similar to AddProduct
+            var sellerStoreIds = _db.GetStoreIdsForUser(User?.Identity?.Name ?? string.Empty);
             int storeId = 0;
             if (Request.HasFormContentType && int.TryParse(Request.Form["StoreId"], out var fid)) storeId = fid;
-            if (storeId == 0) storeId = GetSellerStoreId();
+            if (sellerStoreIds.Count == 0) return Json(new { success = false, error = "User has no associated stores" });
+            if (sellerStoreIds.Count == 1) storeId = sellerStoreIds[0];
+            if (sellerStoreIds.Count > 1 && !sellerStoreIds.Contains(storeId)) return Json(new { success = false, error = "Multiple stores - specify StoreId" });
+
             try
             {
                 var cmd = $"addproduct|{User?.Identity?.Name ?? string.Empty}|{EscapePipe(model.ProductName)}|{model.CategoryId}|{model.ManufacturerId}|{EscapePipe(model.Description)}|{model.Price.ToString(CultureInfo.InvariantCulture)}|{model.Discount.ToString(CultureInfo.InvariantCulture)}|{model.Quantity}|{EscapePipe(model.ImageUrl)}|{storeId}";
@@ -238,7 +339,9 @@ namespace Kursovoi.Controllers
 
             int storeId = 0;
             if (Request.HasFormContentType && int.TryParse(Request.Form["StoreId"], out var fid2)) storeId = fid2;
-            if (storeId == 0) storeId = GetSellerStoreId();
+            var sellerStoreIds = _db.GetStoreIdsForUser(User?.Identity?.Name ?? string.Empty);
+            if (sellerStoreIds.Count == 1) storeId = sellerStoreIds[0];
+
             string storeName = "store";
             try
             {
@@ -268,20 +371,20 @@ namespace Kursovoi.Controllers
                         if (!csv.Read()) break;
                         var fields = new List<string>();
                         for (int i = 0; csv.TryGetField<string>(i, out var f); i++) fields.Add(f ?? string.Empty);
-                        if (fields.Count < 8) { errors.Add($"Строка {row}: Недостаточно столбцов"); continue; }
+                        if (fields.Count < 8) { errors.Add($"Строка {row}: недостаточно полей"); continue; }
 
                         var model = new AddProductViewModel();
                         model.ProductName = fields[0].Trim();
-                        if (!int.TryParse(fields[1].Trim(), out var cat)) { errors.Add($"Строка {row}: Неверный CategoryId"); continue; }
+                        if (!int.TryParse(fields[1].Trim(), out var cat)) { errors.Add($"Строка {row}: неверный CategoryId"); continue; }
                         model.CategoryId = cat;
-                        if (!int.TryParse(fields[2].Trim(), out var man)) { errors.Add($"Строка {row}: Неверный ManufacturerId"); continue; }
+                        if (!int.TryParse(fields[2].Trim(), out var man)) { errors.Add($"Строка {row}: неверный ManufacturerId"); continue; }
                         model.ManufacturerId = man;
                         model.Description = fields[3].Trim();
-                        if (!decimal.TryParse(fields[4].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var price)) { errors.Add($"Строка {row}: Неверная цена"); continue; }
+                        if (!decimal.TryParse(fields[4].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var price)) { errors.Add($"Строка {row}: неверная цена"); continue; }
                         model.Price = price;
                         if (!decimal.TryParse(fields[5].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var disc)) disc = 0m;
                         model.Discount = disc;
-                        if (!int.TryParse(fields[6].Trim(), out var qty)) { errors.Add($"Строка {row}: Неверное количество"); continue; }
+                        if (!int.TryParse(fields[6].Trim(), out var qty)) { errors.Add($"Строка {row}: неверное количество"); continue; }
                         model.Quantity = qty;
                         var imageField = fields[7].Trim();
 
@@ -306,7 +409,7 @@ namespace Kursovoi.Controllers
                                 }
                                 catch
                                 {
-                                    errors.Add($"Строка {row}: Не удалось сохранить изображение {uploaded.FileName}");
+                                    errors.Add($"Строка {row}: не удалось сохранить изображение {uploaded.FileName}");
                                 }
                             }
                             else
@@ -325,7 +428,7 @@ namespace Kursovoi.Controllers
                                     }
                                     catch
                                     {
-                                        errors.Add($"Строка {row}: Не удалось скопировать изображение из {imageField}");
+                                        errors.Add($"Строка {row}: не удалось скопировать изображение из {imageField}");
                                     }
                                 }
                             }
@@ -337,15 +440,35 @@ namespace Kursovoi.Controllers
                         try
                         {
                             var cmd = $"addproduct|{User?.Identity?.Name ?? string.Empty}|{EscapePipe(model.ProductName)}|{model.CategoryId}|{model.ManufacturerId}|{EscapePipe(model.Description)}|{model.Price.ToString(CultureInfo.InvariantCulture)}|{model.Discount.ToString(CultureInfo.InvariantCulture)}|{model.Quantity}|{EscapePipe(model.ImageUrl)}|{storeId}";
-                            var resp = Models.UdpClientHelper.SendUdpMessage(cmd);
-                            if (string.IsNullOrEmpty(resp) || !resp.Trim().Equals("OK", System.StringComparison.OrdinalIgnoreCase))
+                            // Try to add directly via DB from web app (preferred)
+                            bool addedViaDb = false;
+                            try
                             {
-                                errors.Add($"Строка {row}: Сервер вернул ошибку для товара '{model.ProductName}': {resp}");
+                                addedViaDb = _db.AddProductToDb(model.ProductName, model.CategoryId, model.ManufacturerId, model.Description, model.Price, model.Discount, model.Quantity, model.ImageUrl, storeId);
+                            }
+                            catch { addedViaDb = false; }
+
+                            if (addedViaDb)
+                            {
+                                errors.Add($"Строка {row}: товар добавлен (DB)");
+                            }
+
+                            // if DB insert failed, try UDP as a fallback
+                            var resp = Models.UdpClientHelper.SendUdpMessage(cmd);
+                            if (!string.IsNullOrEmpty(resp) && resp.Trim().ToUpper() == "OK")
+                            {
+                                errors.Add($"Строка {row}: товар добавлен (UDP)");
+                            }
+                            else
+                            {
+                                // show error from DB helper if available, otherwise server response
+                                var err = !string.IsNullOrEmpty(_db?.LastError) ? _db.LastError : (resp ?? "(неизвестный ответ)");
+                                errors.Add($"Строка {row}: ошибка при добавлении: " + err);
                             }
                         }
                         catch (System.Exception ex)
                         {
-                            errors.Add($"Строка {row}: Ошибка отправки на сервер: {ex.Message}");
+                            errors.Add($"Строка {row}: ошибка при добавлении: " + ex.Message);
                         }
                     }
                     catch (CsvHelperException cex)
@@ -356,7 +479,7 @@ namespace Kursovoi.Controllers
             }
 
             if (errors.Any()) TempData["AddProductCsvReport"] = string.Join("\n", errors);
-            else TempData["AddProductCsvReport"] = "Импорт завершён без ошибок";
+            else TempData["AddProductCsvReport"] = "Все записи успешно добавлены";
             // keep saved file name for report viewing
             TempData["CsvUploadFile"] = savedName;
 
@@ -473,6 +596,23 @@ namespace Kursovoi.Controllers
             }
             catch { }
             return list;
+        }
+
+        private List<KeyValuePair<int,string>> BuildStoreOptions(List<int> storeIds)
+        {
+            var opts = new List<KeyValuePair<int,string>>();
+            try
+            {
+                var storesResp = Models.UdpClientHelper.SendUdpMessage("getallstores");
+                var stores = ParseStores(storesResp).ToDictionary(s => s.StoreID, s => s.StoreName);
+                foreach (var sid in storeIds)
+                {
+                    var name = stores.ContainsKey(sid) ? stores[sid] : sid.ToString();
+                    opts.Add(new KeyValuePair<int, string>(sid, name));
+                }
+            }
+            catch { }
+            return opts;
         }
 
         private static string EscapePipe(string s) => (s ?? string.Empty).Replace("|", " ");
@@ -719,6 +859,191 @@ namespace Kursovoi.Controllers
             vm.AverageRating = allReviews.Any() ? allReviews.Average(r => r.AverageRating) : 0m;
 
             return vm;
+        }
+
+        [HttpGet]
+        public IActionResult EditProduct(int id)
+        {
+            if (id <= 0) return BadRequest();
+            ProductViewModel? model = null;
+            // try DB first
+            try { model = _db.GetProductById(id); } catch { model = null; }
+            if (model == null)
+            {
+                // fallback to UDP
+                var resp = Models.UdpClientHelper.SendUdpMessage($"getproductbyid|{id}");
+                if (!string.IsNullOrEmpty(resp))
+                {
+                    var parts = resp.Split('|');
+                    if (parts.Length >= 9 && int.TryParse(parts[0], out var pid))
+                    {
+                        model = new ProductViewModel {
+                            ProductID = pid,
+                            ProductName = parts.Length>1?parts[1]:string.Empty,
+                            CategoryId = parts.Length>2 && int.TryParse(parts[2], out var c)?c:0,
+                            ManufacturerId = parts.Length>3 && int.TryParse(parts[3], out var m)?m:0,
+                            Description = parts.Length>4?parts[4]:string.Empty,
+                            Price = parts.Length>5 && decimal.TryParse(parts[5], NumberStyles.Any, CultureInfo.InvariantCulture, out var pr)?pr:0m,
+                            Discount = parts.Length>6 && decimal.TryParse(parts[6], NumberStyles.Any, CultureInfo.InvariantCulture, out var di)?di:0m,
+                            Quantity = parts.Length>7 && int.TryParse(parts[7], out var q)?q:0,
+                            ImageUrl = parts.Length>8?parts[8]:string.Empty
+                        };
+                    }
+                }
+            }
+            if (model==null) return NotFound();
+            ViewData["Categories"] = GetCategories();
+            ViewData["Manufacturers"] = GetManufacturers();
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult EditProduct(ProductViewModel model)
+        {
+            if (model==null || model.ProductID<=0) return BadRequest();
+            if (!ModelState.IsValid)
+            {
+                ViewData["Categories"] = GetCategories();
+                ViewData["Manufacturers"] = GetManufacturers();
+                return View(model);
+            }
+
+            bool ok = false;
+            // try direct DB update first
+            try
+            {
+                ok = _db.UpdateProduct(model.ProductID, model.ProductName, model.CategoryId, model.ManufacturerId, model.Description, model.Price, model.Discount, model.Quantity, model.ImageUrl, model.StoreID);
+            }
+            catch { ok = false; }
+
+            string usedPath = "db";
+            if (!ok)
+            {
+                // fallback to UDP command
+                usedPath = "udp";
+                var cmd = $"updateproduct|{User?.Identity?.Name ?? string.Empty}|{model.ProductID}|{EscapePipe(model.ProductName)}|{model.CategoryId}|{model.ManufacturerId}|{EscapePipe(model.Description)}|{model.Price.ToString(CultureInfo.InvariantCulture)}|{model.Discount.ToString(CultureInfo.InvariantCulture)}|{model.Quantity}|{EscapePipe(model.ImageUrl)}|{model.StoreID}";
+                try
+                {
+                    var resp = Models.UdpClientHelper.SendUdpMessage(cmd);
+                    ok = !string.IsNullOrEmpty(resp) && resp.Trim().ToUpper()=="OK";
+                }
+                catch { ok=false; }
+            }
+
+            if (ok)
+            {
+                TempData["Message"] = $"Изменено ({usedPath}).";
+                // redirect back to edit so user can see updated values
+                return RedirectToAction("EditProduct", new { id = model.ProductID });
+            }
+            var detail = string.Empty;
+            try { if (!string.IsNullOrEmpty(_db?.LastError)) detail = _db.LastError; } catch { }
+            TempData["ErrorDetail"] = detail;
+            ModelState.AddModelError(string.Empty, "Не удалось сохранить изменения");
+            ViewData["Categories"] = GetCategories();
+            ViewData["Manufacturers"] = GetManufacturers();
+            return View(model);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult BlockProduct(int productId)
+        {
+            if (productId<=0) return BadRequest();
+            bool ok = false;
+            string used = "db";
+            try { ok = _db.UpdateProductStatus(productId, true); } catch { ok=false; }
+            string udpResp = null;
+            if (!ok)
+            {
+                used = "udp";
+                try { udpResp = Models.UdpClientHelper.SendUdpMessage($"setproductstatus|{productId}|1"); ok = udpResp!=null && udpResp.Trim().ToUpper()=="OK"; } catch { }
+            }
+            var message = ok ? $"Товар {productId} заблокирован ({used})." : $"Не удалось заблокировать товар {productId}.";
+            string detail = null;
+            if (!ok)
+            {
+                try { if (!string.IsNullOrEmpty(_db?.LastError)) detail = _db.LastError; else if (!string.IsNullOrEmpty(udpResp)) detail = udpResp; } catch { }
+            }
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                return Json(new { success = ok, message = message, status = ok ? true : (bool?)null, error = detail });
+            }
+
+            TempData["Message"] = message;
+            if (!string.IsNullOrEmpty(detail)) TempData["ErrorDetail"] = detail;
+            return RedirectToAction("Index");
+        }
+
+        public IActionResult UnblockProduct(int productId)
+        {
+            if (productId<=0) return BadRequest();
+            bool ok = false;
+            string used = "db";
+            try { ok = _db.UpdateProductStatus(productId, false); } catch { ok=false; }
+            string udpResp2 = null;
+            if (!ok)
+            {
+                used = "udp";
+                try { udpResp2 = Models.UdpClientHelper.SendUdpMessage($"setproductstatus|{productId}|0"); ok = udpResp2!=null && udpResp2.Trim().ToUpper()=="OK"; } catch { }
+            }
+            var message = ok ? $"Товар {productId} разблокирован ({used})." : $"Не удалось разблокировать товар {productId}.";
+            string detail = null;
+            if (!ok)
+            {
+                try { if (!string.IsNullOrEmpty(_db?.LastError)) detail = _db.LastError; else if (!string.IsNullOrEmpty(udpResp2)) detail = udpResp2; } catch { }
+            }
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                return Json(new { success = ok, message = message, status = ok ? false : (bool?)null, error = detail });
+            }
+
+            TempData["Message"] = message;
+            if (!string.IsNullOrEmpty(detail)) TempData["ErrorDetail"] = detail;
+            return RedirectToAction("Index");
+        }
+
+        [HttpGet]
+        [AllowAnonymous]
+        public IActionResult TestDb(int productId = 0)
+        {
+            try
+            {
+                if (productId > 0)
+                {
+                    var prod = _db.GetProductById(productId);
+                    return Json(new { ok = prod != null, product = prod, error = _db.LastError });
+                }
+                else
+                {
+                    // try a harmless query: get store id for current user if available
+                    var login = User?.Identity?.Name ?? string.Empty;
+                    var sid = _db.GetStoreIdForUser(login);
+                    return Json(new { ok = true, storeId = sid, error = _db.LastError });
+                }
+            }
+            catch (System.Exception ex)
+            {
+                return Json(new { ok = false, error = ex.Message });
+            }
+        }
+
+        [HttpGet]
+        [AllowAnonymous]
+        public IActionResult TestUdp()
+        {
+            try
+            {
+                var resp = Models.UdpClientHelper.SendUdpMessage("getproducts");
+                return Json(new { ok = true, response = resp });
+            }
+            catch (System.Exception ex)
+            {
+                return Json(new { ok = false, error = ex.Message });
+            }
         }
     }
 }

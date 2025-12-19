@@ -6,6 +6,16 @@
 
 <div class="seller-dashboard">
     <h1>Панель продавца</h1>
+
+    @if (TempData["Message"] != null)
+    {
+        <div class="alert alert-success">@TempData["Message"]</div>
+    }
+    @if (TempData["ErrorDetail"] != null)
+    {
+        <div class="alert alert-danger">Ошибка: @TempData["ErrorDetail"]</div>
+    }
+
     @* Hidden antiforgery token for AJAX *@
     <form id="afForm">@Html.AntiForgeryToken()</form>
 
@@ -26,11 +36,22 @@
             </div>
 
             <table id="sellerProductsTable" class="table table-striped table-sortable">
-                <thead><tr><th class="sortable" data-type="text">Название</th><th class="sortable" data-type="text">Категория</th><th class="sortable" data-type="number">Цена</th><th class="sortable" data-type="number">Кол-во</th></tr></thead>
+                <thead><tr><th class="sortable" data-type="text">Название</th><th class="sortable" data-type="text">Категория</th><th class="sortable" data-type="number">Цена</th><th class="sortable" data-type="number">Кол-во</th><th>Действия</th></tr></thead>
                 <tbody>
                 @foreach(var p in Model.Products)
                 {
-                    <tr data-product-id="@p.ProductID"><td><a href="@Url.Action("Details","Home", new { id = p.ProductID })">@p.ProductName</a></td><td>@p.CategoryName</td><td>@p.Price</td><td>@p.Quantity</td></tr>
+                    <tr data-product-id="@p.ProductID"><td><a href="@Url.Action("Details","Home", new { id = p.ProductID })">@p.ProductName</a></td><td>@p.CategoryName</td><td>@p.Price</td><td>@p.Quantity</td><td>
+                        <a class="btn btn-sm btn-link" href="@Url.Action("Details","Home", new { id = p.ProductID })">Просмотр</a>
+                        <a class="btn btn-sm btn-primary" href="@Url.Action("EditProduct","Seller", new { id = p.ProductID })">Редактировать</a>
+                        @if (p.Status)
+                        {
+                            <button type="button" class="btn btn-sm btn-success ms-1" data-product-id="@p.ProductID" data-action="unblock">Разблокировать</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-sm btn-danger ms-1" data-product-id="@p.ProductID" data-action="block">Заблокировать</button>
+                        }
+                    </td></tr>
                 }
                 </tbody>
             </table>
@@ -255,6 +276,55 @@
                     }
                 }).catch(function(){ alert('Ошибка сети'); }).finally(function(){ btn.disabled = false; btn.textContent = orig; });
             });
+        });
+
+        // AJAX handler for block/unblock buttons
+        function sendToggle(btn, action) {
+            var productId = btn.getAttribute('data-product-id');
+            if (!productId) return;
+            var tokenInput = document.querySelector('form#afForm input[name="__RequestVerificationToken"]');
+            var token = tokenInput ? tokenInput.value : null;
+            var fd = new FormData();
+            fd.append('productId', productId);
+            if (token) fd.append('__RequestVerificationToken', token);
+            fetch('/Seller/' + action, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function(r){ return r.json(); })
+                .then(function(res){
+                    if (!res) { alert('Ошибка сервера'); return; }
+                    if (res.success) {
+                        // replace only the clicked button (preserve view/edit links)
+                        var row = document.querySelector('tr[data-product-id="' + productId + '"]');
+                        if (!row) return;
+                        // find the button element within the row that matches productId and action
+                        var btnSelector = 'button[data-product-id="' + productId + '"]';
+                        var existingBtn = row.querySelector(btnSelector);
+                        if (!existingBtn) return;
+                        if (action === 'BlockProduct') {
+                            // replace with Unblock button
+                            var newBtn = '<button type="button" class="btn btn-sm btn-success ms-1" data-product-id="' + productId + '" data-action="unblock">Разблокировать</button>';
+                            existingBtn.outerHTML = newBtn;
+                        } else {
+                            // replace with Block button
+                            var newBtn2 = '<button type="button" class="btn btn-sm btn-danger ms-1" data-product-id="' + productId + '" data-action="block">Заблокировать</button>';
+                            existingBtn.outerHTML = newBtn2;
+                        }
+                    } else {
+                        alert('Ошибка: ' + (res.error || res.message || 'неизвестная ошибка'));
+                    }
+                }).catch(function(){ alert('Сетевой или серверный сбой'); });
+        }
+
+        // delegate clicks on block/unblock buttons
+        document.body.addEventListener('click', function(e){
+            var btn = e.target.closest('button[data-action]');
+            if (!btn) return;
+            var action = btn.getAttribute('data-action');
+            if (action === 'block') {
+                if (!confirm('Подтвердите блокировку товара?')) return;
+                sendToggle(btn, 'BlockProduct');
+            } else if (action === 'unblock') {
+                sendToggle(btn, 'UnblockProduct');
+            }
         });
 
         // Do not force-show any tab here; rely on persisted saved tab or server-rendered active class

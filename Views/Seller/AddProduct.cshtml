@@ -5,6 +5,7 @@
     var mans = ViewData["Manufacturers"] as List<KeyValuePair<int,string>> ?? new List<KeyValuePair<int,string>>();
     var storeId = ViewData["StoreId"] as int? ?? 0;
     var storeName = ViewData["StoreName"] as string ?? string.Empty;
+    var storeOptions = ViewData["StoreOptions"] as List<KeyValuePair<int,string>>;
 }
 
 <h2>Добавить товар</h2>
@@ -22,11 +23,21 @@
     @Html.AntiForgeryToken()
     @Html.ValidationSummary(true, "", new { @class = "text-danger" })
 
-    @* include StoreId as hidden field and show store name *@
+    @* include StoreId as hidden field and show store name or dropdown *@
     <input type="hidden" name="StoreId" value="@storeId" />
     <div class="mb-2">
         <label class="form-label">Магазин</label>
-        <input class="form-control" value="@(string.IsNullOrEmpty(storeName) ? "(не привязан)" : storeName)" readonly />
+        @if (storeOptions != null && storeOptions.Count > 1)
+        {
+            <select name="StoreId" class="form-select" required>
+                <option value="">-- Выберите магазин --</option>
+                @foreach(var s in storeOptions) { <option value="@s.Key">@s.Value</option>; }
+            </select>
+        }
+        else
+        {
+            <input class="form-control" value="@(string.IsNullOrEmpty(storeName) ? "(не привязан)" : storeName)" readonly />
+        }
     </div>
 
     <div class="mb-2">
@@ -36,14 +47,14 @@
     <div class="mb-2">
         <label class="form-label">Категория</label>
         <select name="CategoryId" class="form-select" required>
-            <option value="">-- выбрать --</option>
+            <option value="">-- Выберите --</option>
             @foreach(var c in cats) { <option value="@c.Key">@c.Value</option>; }
         </select>
     </div>
     <div class="mb-2">
         <label class="form-label">Производитель</label>
         <select name="ManufacturerId" class="form-select" required>
-            <option value="">-- выбрать --</option>
+            <option value="">-- Выберите --</option>
             @foreach(var m in mans) { <option value="@m.Key">@m.Value</option>; }
         </select>
     </div>
@@ -56,15 +67,15 @@
         <input name="Price" type="number" step="0.01" class="form-control" value="@Model.Price" required />
     </div>
     <div class="mb-2">
-        <label class="form-label">Скидка (например 0.15 для 15%)</label>
+        <label class="form-label">Скидка (например 0.15 или 15%)</label>
         <input name="Discount" step="0.01" type="number" class="form-control" value="@Model.Discount" />
     </div>
     <div class="mb-2">
-        <label class="form-label">Количество на складе</label>
+        <label class="form-label">Начальный остаток</label>
         <input name="Quantity" type="number" class="form-control" value="@Model.Quantity" required />
     </div>
     <div class="mb-2">
-        <label class="form-label">Выберите фото с компьютера</label>
+        <label class="form-label">Изображение товара</label>
         <input type="file" name="imageFile" accept="image/*" class="form-control" />
     </div>
 
@@ -76,39 +87,59 @@
 
 <hr />
 
-<h4>Импорт через CSV/Excel</h4>
-<p>Можно загрузить CSV файл с товарами. Файл должен быть в кодировке UTF-8. Столбцы в следующем порядке (без заголовка):</p>
-<ol>
-    <li><strong>ProductName</strong> — Название товара (строка)</li>
-    <li><strong>CategoryId</strong> — Идентификатор категории (число) — используйте ID из таблицы категорий</li>
-    <li><strong>ManufacturerId</strong> — Идентификатор производителя (число) — используйте ID производителя</li>
-    <li><strong>Description</strong> — Краткое описание (строка)</li>
-    <li><strong>Price</strong> — Цена, например 199.99</li>
-    <li><strong>Discount</strong> — Скидка дробным числом, например 0.15 для 15% (можно 0)</li>
-    <li><strong>Quantity</strong> — Количество на складе (целое число)</li>
-    <li><strong>ImageFileName</strong> — Имя файла изображения (например <code>img1.jpg</code>) или полный путь в случае локальной загрузки. Если вы будете загружать изображения через форму ниже, указывайте только имя файла.</li>
-</ol>
-<p>Правила для изображений:</p>
-<ul>
-    <li>Вы можете загрузить изображения вместе с CSV: в форме ниже есть поле для выбора нескольких файлов.</li>
-    <li>По каждому загруженному товару файл изображения будет скопирован в папку проекта: <code>C:\Users\seluz\source\repos\Kursovoi\Images</code></li>
-    <li>Имя сохраняемого файла: <strong>&lt;Название магазина&gt;_&lt;Название товара&gt;.jpg</strong> — все пробелы заменяются на символ '_' и удаляются недопустимые символы. Расширение будет установлено в <code>.jpg</code>.</li>
-    <li>Если исходный файл не найден среди загруженных файлов, товар будет создан без изображения.</li>
-</ul>
+<h4>Загрузка CSV/Excel</h4>
+<p>Описание полей и инструкции...</p>
 
 <form method="post" asp-action="AddProductUpload" enctype="multipart/form-data">
     @Html.AntiForgeryToken()
     <input type="hidden" name="StoreId" value="@storeId" />
     <div class="mb-2">
-        <label class="form-label">Выберите CSV-файл</label>
+        <label class="form-label">CSV-файл</label>
         <input type="file" name="csvFile" accept=".csv" class="form-control" required />
     </div>
     <div class="mb-2">
-        <label class="form-label">Загрузить изображения (несколько)</label>
+        <label class="form-label">Дополнительные изображения (опционально)</label>
         <input type="file" name="images" accept="image/*" multiple class="form-control" />
     </div>
     <div>
-        <button class="btn btn-secondary">Загрузить и импортировать</button>
+        <button class="btn btn-secondary">Загрузить и добавить</button>
         <a class="btn btn-link" href="@Url.Action("Index","Seller")">Отмена</a>
     </div>
 </form>
+
+@section Scripts {
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+    var form = document.querySelector('form[method="post"][enctype="multipart/form-data"]');
+    if (!form) return;
+    form.addEventListener('submit', function(e){
+        // if user has JS enabled, intercept and send via AJAX
+        e.preventDefault();
+        var fd = new FormData(form);
+        var token = document.querySelector('form input[name="__RequestVerificationToken"]');
+        if (token) fd.append('__RequestVerificationToken', token.value);
+        var submitBtn = form.querySelector('button[type="submit"], button');
+        if (submitBtn) { submitBtn.disabled = true; }
+        fetch(form.action || window.location.pathname, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function(r){ return r.json().catch(function(){ return { success: false, error: 'Invalid JSON response' }; }); })
+            .then(function(res){
+                if (submitBtn) submitBtn.disabled = false;
+                if (!res) { alert('Ошибка сервера'); return; }
+                if (res.success) {
+                    alert('Товар добавлен');
+                    window.location.href = '/Seller';
+                    return;
+                }
+                // show validation errors
+                if (res.errors) {
+                    var text = '';
+                    Object.keys(res.errors).forEach(function(k){ res.errors[k].forEach(function(msg){ text += msg + '\n'; }); });
+                    alert('Ошибки:\n' + text);
+                    return;
+                }
+                if (res.error) { alert('Ошибка: ' + res.error); }
+            }).catch(function(){ if (submitBtn) submitBtn.disabled = false; alert('Сетевая ошибка'); });
+    });
+});
+</script>
+}

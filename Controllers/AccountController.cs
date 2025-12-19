@@ -202,14 +202,56 @@ namespace Kursovoi.Controllers
             var roleName = response; // not null/empty here
 
             // sign in with cookie authentication and include role claim
-            var claims = new List<Claim>
+            var claims = new List<System.Security.Claims.Claim>
             {
-                new Claim(ClaimTypes.Name, model.Login),
-                new Claim(ClaimTypes.Role, roleName)
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, model.Login),
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, roleName)
             };
+
+            // Attempt to get StoreID from UDP server users list
+            int? storeIdForClaim = null;
+            try
+            {
+                var usersResp = Models.UdpClientHelper.SendUdpMessage("getusers");
+                if (!string.IsNullOrEmpty(usersResp) && !usersResp.StartsWith("ERROR|"))
+                {
+                    var ulines = usersResp.Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var l in ulines)
+                    {
+                        var parts = l.Split('|');
+                        if (parts.Length < 2) continue;
+                        if (string.Equals(parts[1].Trim(), model.Login, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (parts.Length >= 7 && int.TryParse(parts[6], out var sid) && sid > 0)
+                            {
+                                storeIdForClaim = sid;
+                                claims.Add(new System.Security.Claims.Claim("StoreId", sid.ToString()));
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            catch { }
+
             var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             var principal = new ClaimsPrincipal(identity);
             await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+
+            // store StoreId in session for quick lookup (if found)
+            try
+            {
+                if (storeIdForClaim.HasValue && storeIdForClaim.Value > 0)
+                {
+                    HttpContext.Session.SetInt32("StoreId", storeIdForClaim.Value);
+                }
+                else
+                {
+                    // ensure session key cleared
+                    HttpContext.Session.Remove("StoreId");
+                }
+            }
+            catch { }
 
             // After sign-in, fetch basket count and store in session
             try
