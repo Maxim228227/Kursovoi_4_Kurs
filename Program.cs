@@ -18,6 +18,31 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     {
         options.LoginPath = "/Account/Login";
         options.Cookie.Name = "KursovoiAuth";
+
+        // For AJAX requests we should return 401/403 instead of redirecting to login page
+        options.Events = new CookieAuthenticationEvents
+        {
+            OnRedirectToLogin = ctx =>
+            {
+                if (ctx.Request.Headers["X-Requested-With"] == "XMLHttpRequest" || ctx.Request.Headers["Accept"].ToString().Contains("application/json"))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return System.Threading.Tasks.Task.CompletedTask;
+                }
+                ctx.Response.Redirect(ctx.RedirectUri);
+                return System.Threading.Tasks.Task.CompletedTask;
+            },
+            OnRedirectToAccessDenied = ctx =>
+            {
+                if (ctx.Request.Headers["X-Requested-With"] == "XMLHttpRequest" || ctx.Request.Headers["Accept"].ToString().Contains("application/json"))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return System.Threading.Tasks.Task.CompletedTask;
+                }
+                ctx.Response.Redirect(ctx.RedirectUri);
+                return System.Threading.Tasks.Task.CompletedTask;
+            }
+        };
     });
 
 // Add session for cart
@@ -55,8 +80,10 @@ app.UseStaticFiles();
 
 app.UseRouting();
 
-app.UseAuthentication();
+// IMPORTANT: enable session before authentication if authentication handlers rely on session
 app.UseSession();
+
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(

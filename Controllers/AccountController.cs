@@ -13,6 +13,13 @@ namespace Kursovoi.Controllers
 {
     public class AccountController : Controller
     {
+        private readonly DbHelperClient _db;
+
+        public AccountController(DbHelperClient db)
+        {
+            _db = db;
+        }
+
         [HttpGet]
         public IActionResult Index()
         {
@@ -178,7 +185,7 @@ namespace Kursovoi.Controllers
 
             if (string.IsNullOrEmpty(response))
             {
-                ModelState.AddModelError(string.Empty, "Ошибка авторизации");
+                ModelState.AddModelError(string.Empty, "Пустой ответ от сервера");
                 return View(model);
             }
 
@@ -194,12 +201,34 @@ namespace Kursovoi.Controllers
             // If server returned FAIL => invalid credentials
             if (string.Equals(response, "FAIL", System.StringComparison.OrdinalIgnoreCase))
             {
-                ModelState.AddModelError(string.Empty, "Неверные имя или пароль");
+                ModelState.AddModelError(string.Empty, "Неверно имя или пароль");
                 return View(model);
             }
 
-            // Otherwise treat response as role name (e.g. "admin" or "user" or "seller")
-            var roleName = response; // not null/empty here
+            // server may return either a role name (e.g. "seller") OR a composite "role|storeId"
+            string roleName = response;
+            int? storeIdForClaim = null;
+            if (response.Contains('|'))
+            {
+                var parts = response.Split('|');
+                if (parts.Length >= 1) roleName = parts[0];
+                if (parts.Length >= 2 && int.TryParse(parts[1], out var parsedSid) && parsedSid > 0) storeIdForClaim = parsedSid;
+            }
+
+            // Prefer DB lookup for user's store(s) if available
+            try
+            {
+                var storeIds = _db.GetStoreIdsForUser(model.Login);
+                if (storeIds != null && storeIds.Count > 0)
+                {
+                    if (storeIds.Count == 1)
+                    {
+                        storeIdForClaim = storeIds[0];
+                    }
+                    // if multiple stores we do not pick one automatically; seller will choose when adding product
+                }
+            }
+            catch { }
 
             // sign in with cookie authentication and include role claim
             var claims = new List<System.Security.Claims.Claim>
@@ -208,31 +237,38 @@ namespace Kursovoi.Controllers
                 new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, roleName)
             };
 
-            // Attempt to get StoreID from UDP server users list
-            int? storeIdForClaim = null;
-            try
+            if (storeIdForClaim.HasValue)
             {
-                var usersResp = Models.UdpClientHelper.SendUdpMessage("getusers");
-                if (!string.IsNullOrEmpty(usersResp) && !usersResp.StartsWith("ERROR|"))
+                claims.Add(new System.Security.Claims.Claim("StoreId", storeIdForClaim.Value.ToString()));
+            }
+
+            // If store not provided yet, fallback to UDP getusers as before
+            if (!storeIdForClaim.HasValue)
+            {
+                try
                 {
-                    var ulines = usersResp.Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries);
-                    foreach (var l in ulines)
+                    var usersResp = Models.UdpClientHelper.SendUdpMessage("getusers");
+                    if (!string.IsNullOrEmpty(usersResp) && !usersResp.StartsWith("ERROR|"))
                     {
-                        var parts = l.Split('|');
-                        if (parts.Length < 2) continue;
-                        if (string.Equals(parts[1].Trim(), model.Login, StringComparison.OrdinalIgnoreCase))
+                        var ulines = usersResp.Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries);
+                        foreach (var l in ulines)
                         {
-                            if (parts.Length >= 7 && int.TryParse(parts[6], out var sid) && sid > 0)
+                            var parts = l.Split('|');
+                            if (parts.Length < 2) continue;
+                            if (string.Equals(parts[1].Trim(), model.Login, System.StringComparison.OrdinalIgnoreCase))
                             {
-                                storeIdForClaim = sid;
-                                claims.Add(new System.Security.Claims.Claim("StoreId", sid.ToString()));
+                                if (parts.Length >= 7 && int.TryParse(parts[6], out var sid) && sid > 0)
+                                {
+                                    storeIdForClaim = sid;
+                                    claims.Add(new System.Security.Claims.Claim("StoreId", sid.ToString()));
+                                }
+                                break;
                             }
-                            break;
                         }
                     }
                 }
+                catch { }
             }
-            catch { }
 
             var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             var principal = new ClaimsPrincipal(identity);
@@ -265,7 +301,7 @@ namespace Kursovoi.Controllers
                     {
                         var parts = line.Split('|');
                         if (parts.Length < 2) continue;
-                        if (string.Equals(parts[1].Trim(), model.Login, StringComparison.OrdinalIgnoreCase) && int.TryParse(parts[0], out var id))
+                        if (string.Equals(parts[1].Trim(), model.Login, System.StringComparison.OrdinalIgnoreCase) && int.TryParse(parts[0], out var id))
                         {
                             userId = id; break;
                         }
@@ -293,19 +329,16 @@ namespace Kursovoi.Controllers
                 // ignore
             }
 
-            // If admin, redirect to admin panel and request tab reset
             if (string.Equals(roleName, "admin", System.StringComparison.OrdinalIgnoreCase))
             {
                 return RedirectToAction("Index", "Admin", new { fromLogin = 1 });
             }
 
-            // If seller, redirect to seller panel
             if (string.Equals(roleName, "seller", System.StringComparison.OrdinalIgnoreCase))
             {
                 return RedirectToAction("Index", "Seller");
             }
 
-            // don't set TempData message on successful login
             if (!string.IsNullOrEmpty(returnUrl)) return Redirect(returnUrl);
             return RedirectToAction("Index", "Home");
         }
@@ -383,6 +416,37 @@ namespace Kursovoi.Controllers
             {
                 return Json(new { success = false });
             }
+        }
+
+        [HttpGet]
+        [AllowAnonymous]
+        public IActionResult DebugClaims()
+        {
+            var list = new List<object>();
+            try
+            {
+                if (User?.Identity?.IsAuthenticated == true)
+                {
+                    foreach (var c in User.Claims)
+                    {
+                        list.Add(new { c.Type, c.Value });
+                    }
+                }
+            }
+            catch { }
+
+            int? sessStore = null;
+            try { sessStore = HttpContext.Session.GetInt32("StoreId"); } catch { }
+
+            List<int> dbStores = new List<int>();
+            try
+            {
+                var name = User?.Identity?.Name ?? string.Empty;
+                if (!string.IsNullOrEmpty(name)) dbStores = _db.GetStoreIdsForUser(name);
+            }
+            catch { }
+
+            return Json(new { authenticated = User?.Identity?.IsAuthenticated == true, claims = list, sessionStoreId = sessStore, dbStoreIds = dbStores, dbLastError = _db?.LastError });
         }
 
         private static string ComputeSha256Hash(string rawData)

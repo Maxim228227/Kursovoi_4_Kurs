@@ -109,36 +109,107 @@
 
 @section Scripts {
 <script>
+function safeStringify(obj) {
+    var seen = new WeakSet();
+    try {
+        return JSON.stringify(obj, function(key, value) {
+            if (value && typeof value === 'object') {
+                if (seen.has(value)) return '[Circular]';
+                seen.add(value);
+            }
+            // if value is an Error-like object convert to message
+            if (value && typeof value === 'object' && (value.errorMessage || value.ErrorMessage || value.message || value.Message)) {
+                return value.errorMessage || value.ErrorMessage || value.message || value.Message;
+            }
+            return value;
+        }, 2);
+    } catch (e) {
+        try { return String(obj); } catch { return '[object Object]'; }
+    }
+}
+
+function extractErrorTextFromObject(obj) {
+    if (!obj) return '';
+    if (typeof obj === 'string') return obj;
+    if (typeof obj === 'object') {
+        var candidates = ['errorMessage','ErrorMessage','message','Message','Description'];
+        for (var i=0;i<candidates.length;i++){
+            var k = candidates[i];
+            if (obj[k]) return obj[k];
+        }
+        if (Array.isArray(obj.errors) && obj.errors.length>0) return obj.errors.join('\n');
+        for (var key in obj) {
+            if (!obj.hasOwnProperty(key)) continue;
+            var v = obj[key];
+            if (typeof v === 'string') return v;
+            if (Array.isArray(v) && v.length>0 && typeof v[0] === 'string') return v.join('\n');
+        }
+        return safeStringify(obj);
+    }
+    return String(obj);
+}
+
 document.addEventListener('DOMContentLoaded', function(){
-    var form = document.querySelector('form[method="post"][enctype="multipart/form-data"]');
-    if (!form) return;
+    var forms = document.querySelectorAll('form[method="post"][enctype="multipart/form-data"]');
+    if (!forms || forms.length === 0) return;
+    var form = forms[0];
     form.addEventListener('submit', function(e){
-        // if user has JS enabled, intercept and send via AJAX
         e.preventDefault();
         var fd = new FormData(form);
-        var token = document.querySelector('form input[name="__RequestVerificationToken"]');
-        if (token) fd.append('__RequestVerificationToken', token.value);
+        var tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+        if (tokenInput && tokenInput.value) {
+            fd.set('__RequestVerificationToken', tokenInput.value);
+        }
         var submitBtn = form.querySelector('button[type="submit"], button');
         if (submitBtn) { submitBtn.disabled = true; }
-        fetch(form.action || window.location.pathname, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(function(r){ return r.json().catch(function(){ return { success: false, error: 'Invalid JSON response' }; }); })
-            .then(function(res){
-                if (submitBtn) submitBtn.disabled = false;
-                if (!res) { alert('Ошибка сервера'); return; }
-                if (res.success) {
-                    alert('Товар добавлен');
-                    window.location.href = '/Seller';
-                    return;
-                }
-                // show validation errors
-                if (res.errors) {
-                    var text = '';
-                    Object.keys(res.errors).forEach(function(k){ res.errors[k].forEach(function(msg){ text += msg + '\n'; }); });
-                    alert('Ошибки:\n' + text);
-                    return;
-                }
-                if (res.error) { alert('Ошибка: ' + res.error); }
-            }).catch(function(){ if (submitBtn) submitBtn.disabled = false; alert('Сетевая ошибка'); });
+
+        fetch(form.action || window.location.pathname, {
+            method: 'POST',
+            body: fd,
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(resp){
+            if (!resp.ok) {
+                return resp.text().then(function(t){ throw new Error('Server response ' + resp.status + '. ' + (t ? t.substring(0,1000) : '')); });
+            }
+            var ct = resp.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') === -1) {
+                return resp.text().then(function(text){ try { return JSON.parse(text); } catch { throw new Error('Invalid JSON response from server. Response text: ' + (text ? text.substring(0,1000) : '(empty)')); } });
+            }
+            return resp.json();
+        })
+        .then(function(res){
+            if (submitBtn) submitBtn.disabled = false;
+            if (!res) { alert('Ошибка: пустой ответ'); return; }
+            if (res.success) { alert('Товар добавлен'); window.location.href = '/Seller'; return; }
+            if (res.errors) {
+                var text = '';
+                try {
+                    Object.keys(res.errors).forEach(function(k){
+                        var entry = res.errors[k];
+                        if (Array.isArray(entry)) {
+                            entry.forEach(function(msg){ text += (msg && typeof msg === 'object') ? extractErrorTextFromObject(msg) + '\n' : String(msg) + '\n'; });
+                        } else if (typeof entry === 'string') {
+                            text += entry + '\n';
+                        } else if (entry && typeof entry === 'object') {
+                            Object.values(entry).forEach(function(v){
+                                if (Array.isArray(v)) v.forEach(function(msg){ text += (msg && typeof msg === 'object') ? extractErrorTextFromObject(msg) + '\n' : String(msg) + '\n'; });
+                                else if (typeof v === 'string') text += v + '\n';
+                                else if (v && typeof v === 'object') text += extractErrorTextFromObject(v) + '\n';
+                            });
+                        } else {
+                            text += String(entry) + '\n';
+                        }
+                    });
+                } catch (ex) { text = 'Ошибка разбора ошибок: ' + (ex && ex.message ? ex.message : ex); }
+                alert('Ошибки:\n' + text);
+                return;
+            }
+            if (res.error) { alert('Ошибка: ' + res.error); return; }
+            alert('Неожиданный ответ: ' + safeStringify(res));
+        })
+        .catch(function(err){ if (submitBtn) submitBtn.disabled = false; alert('Ошибка: ' + (err && err.message ? err.message : 'network error')); });
     });
 });
 </script>
