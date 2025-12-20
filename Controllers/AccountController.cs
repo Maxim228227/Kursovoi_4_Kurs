@@ -248,19 +248,43 @@ namespace Kursovoi.Controllers
                 try
                 {
                     var usersResp = Models.UdpClientHelper.SendUdpMessage("getusers");
+                    // ¬ методе Login, после получени€ usersResp:
                     if (!string.IsNullOrEmpty(usersResp) && !usersResp.StartsWith("ERROR|"))
                     {
-                        var ulines = usersResp.Split(new[] {'\n'}, StringSplitOptions.RemoveEmptyEntries);
-                        foreach (var l in ulines)
+                        var ulines = usersResp.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+                        foreach (var line in ulines)
                         {
-                            var parts = l.Split('|');
-                            if (parts.Length < 2) continue;
-                            if (string.Equals(parts[1].Trim(), model.Login, System.StringComparison.OrdinalIgnoreCase))
+                            var parts = line.Split('|');
+
+                            //  лючевое исправление: провер€ем на минимум 7 полей, а не 2
+                            if (parts.Length < 7)
                             {
-                                if (parts.Length >= 7 && int.TryParse(parts[6], out var sid) && sid > 0)
+                                System.Diagnostics.Debug.WriteLine($"ѕропущена строка с недостаточным количеством полей: {line}");
+                                continue;
+                            }
+
+                            var loginFromLine = parts[1].Trim();
+
+                            if (string.Equals(loginFromLine, model.Login, StringComparison.OrdinalIgnoreCase))
+                            {
+                                // ѕарсим StoreID - он точно есть, т.к. проверили parts.Length >= 7
+                                if (int.TryParse(parts[6].Trim(), out var storeId))
                                 {
-                                    storeIdForClaim = sid;
-                                    claims.Add(new System.Security.Claims.Claim("StoreId", sid.ToString()));
+                                    if (storeId > 0)
+                                    {
+                                        storeIdForClaim = storeId;
+                                        claims.Add(new System.Security.Claims.Claim("StoreId", storeId.ToString()));
+                                        System.Diagnostics.Debug.WriteLine($"Ќайден StoreID: {storeId} дл€ пользовател€ {model.Login}");
+                                    }
+                                    else
+                                    {
+                                        System.Diagnostics.Debug.WriteLine($"StoreID = 0 дл€ пользовател€ {model.Login} (не прив€зан к магазину)");
+                                    }
+                                }
+                                else
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"Ќе удалось распарсить StoreID: '{parts[6]}' дл€ пользовател€ {model.Login}");
                                 }
                                 break;
                             }
