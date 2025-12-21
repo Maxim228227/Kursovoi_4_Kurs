@@ -1,20 +1,20 @@
 @model Kursovoi.Models.SellerAnalyticsViewModel
 @{
-    ViewData["Title"] = "Аналитика продавца";
+    ViewData["Title"] = "Аналитика магазина";
 }
 
-<h1>Аналитика продавца</h1>
+<h1>Аналитика магазина</h1>
 
 <div>
     <h3>Фильтры</h3>
     <form id="analyticsFilters" class="mb-4">
         <div class="row">
             <div class="col-md-4">
-                <label for="startDate" class="form-label">Начальная дата</label>
+                <label for="startDate" class="form-label">Период с</label>
                 <input type="date" id="startDate" name="startDate" class="form-control" />
             </div>
             <div class="col-md-4">
-                <label for="endDate" class="form-label">Конечная дата</label>
+                <label for="endDate" class="form-label">по</label>
                 <input type="date" id="endDate" name="endDate" class="form-control" />
             </div>
             <div class="col-md-4">
@@ -45,12 +45,12 @@
 </div>
 
 <div>
-    <h3>Запасы</h3>
+    <h3>На исходе</h3>
     <table class="table">
         <thead>
             <tr>
-                <th>Продукт</th>
-                <th>Количество</th>
+                <th>Товар</th>
+                <th>Кол-во</th>
                 <th>Последнее обновление</th>
             </tr>
         </thead>
@@ -68,13 +68,13 @@
 </div>
 
 <div>
-    <h3>Заказы</h3>
+    <h3>Заказы по дням</h3>
     <table class="table">
         <thead>
             <tr>
                 <th>Период</th>
-                <th>Количество заказов</th>
-                <th>Общая сумма</th>
+                <th>Кол-во</th>
+                <th>Сумма</th>
             </tr>
         </thead>
         <tbody>
@@ -91,13 +91,13 @@
 </div>
 
 <div>
-    <h3>Лучшие продукты</h3>
+    <h3>Топ продаж</h3>
     <table class="table">
         <thead>
             <tr>
-                <th>Продукт</th>
-                <th>Количество продаж</th>
-                <th>Доход</th>
+                <th>Товар</th>
+                <th>Продано</th>
+                <th>Выручка</th>
             </tr>
         </thead>
         <tbody>
@@ -117,54 +117,62 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        // Server-side model data serialized to JS so charts render immediately without extra AJAX
+        var initialOrders = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.OrdersByDay));
+        var initialRunning = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.RunningOutProducts));
+
         const ordersChartCtx = document.getElementById('ordersChart').getContext('2d');
         const stockChartCtx = document.getElementById('stockChart').getContext('2d');
 
         const ordersChart = new Chart(ordersChartCtx, {
             type: 'line',
             data: {
-                labels: [],
+                labels: initialOrders.map(o => o.Period),
                 datasets: [{
-                    label: 'Количество заказов',
-                    data: [],
+                    label: 'Заказы',
+                    data: initialOrders.map(o => o.OrderCount),
                     borderColor: 'blue',
-                    fill: false
+                    backgroundColor: 'rgba(0,0,255,0.05)',
+                    fill: true
                 }]
-            }
+            },
+            options: { responsive: true }
         });
 
         const stockChart = new Chart(stockChartCtx, {
             type: 'bar',
             data: {
-                labels: [],
+                labels: initialRunning.map(p => p.ProductName),
                 datasets: [{
-                    label: 'Количество на складе',
-                    data: [],
+                    label: 'Кол-во',
+                    data: initialRunning.map(p => p.Quantity),
                     backgroundColor: 'orange'
                 }]
-            }
+            },
+            options: { responsive: true }
         });
 
         document.getElementById('applyFilters').addEventListener('click', function () {
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
-            const category = document.getElementById('category').value;
+            const category = document.getElementById('category').value || 0;
 
-            fetch(`/Seller/GetSellerAnalytics?startDate=${startDate}&endDate=${endDate}&categoryId=${category}`)
+            fetch(`/Seller/GetSellerAnalytics?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}&categoryId=${encodeURIComponent(category)}`, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } })
                 .then(response => response.json())
                 .then(data => {
-                    // Update charts and tables with new data
-                    ordersChart.data.labels = data.OrdersByDay.map(o => o.Period);
-                    ordersChart.data.datasets[0].data = data.OrdersByDay.map(o => o.OrderCount);
+                    if (data && data.error) { alert('Ошибка: ' + data.error); return; }
+
+                    // Update charts with returned data
+                    ordersChart.data.labels = (data.OrdersByDay || []).map(o => o.Period);
+                    ordersChart.data.datasets[0].data = (data.OrdersByDay || []).map(o => o.OrderCount);
                     ordersChart.update();
 
-                    stockChart.data.labels = data.RunningOutProducts.map(p => p.ProductName);
-                    stockChart.data.datasets[0].data = data.RunningOutProducts.map(p => p.Quantity);
+                    stockChart.data.labels = (data.RunningOutProducts || []).map(p => p.ProductName);
+                    stockChart.data.datasets[0].data = (data.RunningOutProducts || []).map(p => p.Quantity);
                     stockChart.update();
 
-                    // update tables directly where necessary
-                    // For brevity we rely on reload to show changed data in tables if needed
-                });
+                    // Optionally update tables by reloading the page or updating DOM here
+                }).catch(function(err){ console.error(err); alert('Не удалось загрузить аналитику'); });
         });
     });
 </script>

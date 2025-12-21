@@ -178,5 +178,7 @@ namespace Kursovoi.Controllers
             ViewBag.StoreName = storeName;
             return View(products);
         }
+
+
     }
 }

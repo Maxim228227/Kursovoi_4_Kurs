@@ -17,7 +17,10 @@
 
 @if (Model != null)
 {
-    <div class="mb-2"><strong>Текущий статус (Status):</strong> @(Model.Status ? "Заблокирован" : "Активен")</div>
+    <div class="mb-2">
+        <strong>Текущий статус (Status):</strong>
+        <span id="productStatus" data-product-id="@Model.ProductID">@(Model.Status ? "Заблокирован" : "Активен")</span>
+    </div>
 }
 
 <form asp-action="EditProduct" asp-controller="Seller" method="post">
@@ -82,3 +85,61 @@
 </form>
 
 <!-- Block/unblock moved to seller products list -->
+
+@section Scripts {
+<script>
+    document.addEventListener('DOMContentLoaded', function(){
+        // Update the status display based on client-side IndexedDB blocked list (same DB as product list)
+        var statusEl = document.getElementById('productStatus');
+        if (!statusEl) return;
+        var pid = String(statusEl.getAttribute('data-product-id') || '');
+        if (!pid) return;
+
+        var DB_NAME = 'seller_app_db';
+        var STORE_NAME = 'blocked_products';
+
+        function openDb() {
+            return new Promise(function(resolve, reject){
+                var req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = function(e){
+                    var db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+                };
+                req.onsuccess = function(e){ resolve(e.target.result); };
+                req.onerror = function(e){ reject(e.target.error); };
+            });
+        }
+
+        function getBlockedArray() {
+            return openDb().then(function(db){
+                return new Promise(function(resolve){
+                    try {
+                        var tx = db.transaction(STORE_NAME, 'readonly');
+                        var store = tx.objectStore(STORE_NAME);
+                        var r = store.get('blocked');
+                        r.onsuccess = function(){ resolve(r.result || []); };
+                        r.onerror = function(){ resolve([]); };
+                    } catch(e) { resolve([]); }
+                });
+            }).catch(function(){ return []; });
+        }
+
+        function applyStatusFromBlocked(arr) {
+            var isBlocked = (arr || []).map(String).indexOf(pid) !== -1;
+            statusEl.textContent = isBlocked ? 'Заблокирован' : 'Активен';
+            if (isBlocked) statusEl.classList.add('text-warning'); else statusEl.classList.remove('text-warning');
+        }
+
+        // initial apply
+        getBlockedArray().then(applyStatusFromBlocked);
+
+        // listen for updates from other tabs
+        window.addEventListener('storage', function(e){
+            if (!e.key) return;
+            if (e.key === 'seller_blocked_products_updated') {
+                getBlockedArray().then(applyStatusFromBlocked);
+            }
+        });
+    });
+</script>
+}

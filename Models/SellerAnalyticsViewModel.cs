@@ -33,6 +33,9 @@ namespace Kursovoi.Models
         public List<ProductActivityItem> InactiveProducts { get; set; } = new List<ProductActivityItem>();
 
         public int StoreId { get; set; }
+
+        // Diagnostics: debug info about DB/UDP calls
+        public string Diagnostics { get; set; } = string.Empty;
     }
 
     public class StockAnalyticsItem

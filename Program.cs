@@ -67,6 +67,17 @@ if (Directory.Exists(imagesPath))
     });
 }
 
+// Serve Exel folder so template and example QR-code can be downloaded
+var exelPath = Path.Combine(builder.Environment.ContentRootPath, "Exel");
+if (Directory.Exists(exelPath))
+{
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(exelPath),
+        RequestPath = "/Exel"
+    });
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {

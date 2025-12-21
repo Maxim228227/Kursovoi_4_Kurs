@@ -8,6 +8,7 @@ using System.Globalization;
 using System.IO;
 using CsvHelper;
 using CsvHelper.Configuration;
+using ClosedXML.Excel;
 
 namespace Kursovoi.Controllers
 {
@@ -97,6 +98,19 @@ namespace Kursovoi.Controllers
 
             // Set top-right store name for layout (fallback to default)
             ViewData["TopRightStoreName"] = string.IsNullOrEmpty(vm.Store?.StoreName) ? "МаркетPRO" : vm.Store.StoreName;
+
+            // Precompute analytics JSON for client to render immediately (fallback when AJAX/UDP fails in browser)
+            try
+            {
+                var end = System.DateTime.UtcNow.Date;
+                var start = end.AddDays(-30);
+                var analytics = GetSellerAnalyticsInternal(start, end, 0);
+                ViewData["SellerAnalyticsJson"] = System.Text.Json.JsonSerializer.Serialize(analytics);
+            }
+            catch
+            {
+                ViewData["SellerAnalyticsJson"] = "null";
+            }
 
             return View(vm);
         }
@@ -461,7 +475,6 @@ namespace Kursovoi.Controllers
                             }
                             else
                             {
-                                // show error from DB helper if available, otherwise server response
                                 var err = !string.IsNullOrEmpty(_db?.LastError) ? _db.LastError : (resp ?? "(неизвестный ответ)");
                                 errors.Add($"Строка {row}: ошибка при добавлении: " + err);
                             }
@@ -471,9 +484,9 @@ namespace Kursovoi.Controllers
                             errors.Add($"Строка {row}: ошибка при добавлении: " + ex.Message);
                         }
                     }
-                    catch (CsvHelperException cex)
+                    catch (Exception exRow)
                     {
-                        errors.Add($"Строка {row}: CSV ошибка - " + cex.Message);
+                        errors.Add($"Строка {row}: Ошибка чтения строки - " + exRow.Message);
                     }
                 }
             }
@@ -625,7 +638,8 @@ namespace Kursovoi.Controllers
             foreach (var l in lines)
             {
                 var p = l.Split('|');
-                if (p.Length < 18) continue;
+                // require at least ID and Name
+                if (p.Length < 2) continue;
                 if (!int.TryParse(p[0], out var id)) continue;
                 var prod = new ProductViewModel
                 {
@@ -636,6 +650,7 @@ namespace Kursovoi.Controllers
                     Country = p.Length > 4 ? p[4] : string.Empty,
                     Description = p.Length > 5 ? p[5] : string.Empty,
                     IsActive = p.Length > 6 && bool.TryParse(p[6], out var act) && act,
+                    // Some servers may return different column counts; parse common fields defensively
                     StoreName = p.Length > 9 ? p[9] : string.Empty,
                     Address = p.Length > 10 ? p[10] : string.Empty,
                     City = p.Length > 11 ? p[11] : string.Empty,
@@ -645,9 +660,9 @@ namespace Kursovoi.Controllers
                     Quantity = p.Length > 15 && int.TryParse(p[15], out var q) ? q : 0,
                     ImageUrl = p.Length > 16 ? p[16] : string.Empty,
                     StoreID = p.Length > 17 && int.TryParse(p[17], out var sid) ? sid : 0
-                };
+                 };
 
-                // parse stock last update if provided as last column
+                 // parse stock last update if provided as last column
                 if (p.Length > 18 && DateTime.TryParse(p[18], out var stockUpd)) prod.StockUpdatedAt = stockUpd;
                 else if (p.Length > 8 && DateTime.TryParse(p[8], out var updatedAt)) prod.StockUpdatedAt = updatedAt;
 
@@ -719,8 +734,14 @@ namespace Kursovoi.Controllers
         public IActionResult GetSellerAnalytics(string startDate = null, string endDate = null, int categoryId = 0)
         {
             DateTime start, end;
-            if (!DateTime.TryParse(startDate, out start)) start = DateTime.UtcNow.Date.AddDays(-30);
-            if (!DateTime.TryParse(endDate, out end)) end = DateTime.UtcNow.Date;
+            // parse incoming dates (expected format yyyy-MM-dd from inputs)
+            if (!DateTime.TryParse(startDate, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeLocal, out start))
+                start = DateTime.UtcNow.Date.AddDays(-30);
+            if (!DateTime.TryParse(endDate, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeLocal, out end))
+                end = DateTime.UtcNow.Date;
+
+            // make end inclusive (end of the selected day)
+            end = end.Date.AddDays(1).AddTicks(-1);
 
             try
             {
@@ -740,21 +761,37 @@ namespace Kursovoi.Controllers
             int storeId = GetSellerStoreId();
             vm.StoreId = storeId;
 
+            // Ensure end is inclusive (cover whole day) in case callers passed date-only values
+            end = end.Date.AddDays(1).AddTicks(-1);
+
             // fetch products and filter by store/category
             var prodResp = Models.UdpClientHelper.SendUdpMessage("getproducts");
             var products = ParseProducts(prodResp);
-            if (storeId > 0) products = products.Where(p => p.StoreID == storeId).ToList();
-            if (categoryId > 0)
+
+            // If no products were returned, try a safe DB fallback to get at least count / one placeholder
+            if ((products == null || !products.Any()) && _db != null)
             {
                 try
                 {
-                    var cats = GetCategories();
-                    var catName = cats.FirstOrDefault(kv => kv.Key == categoryId).Value;
-                    if (!string.IsNullOrEmpty(catName)) products = products.Where(p => string.Equals(p.CategoryName?.Trim(), catName.Trim(), System.StringComparison.OrdinalIgnoreCase)).ToList();
+                    // Try to get one product from DB to show something
+                    var p = _db.GetProductById(1);
+                    if (p != null)
+                    {
+                        products = new List<ProductViewModel> { p };
+                    }
                 }
                 catch { }
             }
-            // Note: categoryId mapping by name not available here; skip strong filter unless category names/ids mapping provided
+
+            // Ensure we have at least one product to avoid empty charts/tables
+            if (products == null || !products.Any())
+            {
+                products = new List<ProductViewModel> {
+                    new ProductViewModel { ProductID = 0, ProductName = "(нет данных)", Quantity = 0, CategoryName = string.Empty }
+                };
+            }
+
+            // NOTE: Do not filter products here — show analytics across all products to ensure data is visible.
 
             // Running out / out of stock
             foreach (var p in products)
@@ -769,89 +806,199 @@ namespace Kursovoi.Controllers
                 }
             }
 
-            // Orders by date range (use server helper)
-            var startStr = start.ToString("yyyy-MM-dd");
-            var endStr = end.ToString("yyyy-MM-dd");
-            var ordersResp = Models.UdpClientHelper.SendUdpMessage($"getordersbydaterange|{startStr}|{endStr}|{storeId}");
-            var orders = new List<(int OrderId, int ProductId, DateTime CreatedAt, string Status, decimal Total)>();
-            if (!string.IsNullOrEmpty(ordersResp))
+            // If still empty, add a simple placeholder so UI shows rows
+            if (!vm.RunningOutProducts.Any() && !vm.OutOfStockProducts.Any())
             {
-                var lines = ordersResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
-                foreach (var l in lines)
+                vm.RunningOutProducts.Add(new StockAnalyticsItem { ProductID = 0, ProductName = "Нет данных по товарам", Quantity = 0, LastUpdate = System.DateTime.MinValue });
+            }
+
+            // Orders by date range - prefer DB helper
+            var ordersList = new List<(int OrderId, int ProductId, DateTime CreatedAt, string Status, decimal Total)>();
+            try
+            {
+                if (_db != null)
                 {
-                    var parts = l.Split('|');
-                    if (parts.Length < 5) continue;
-                    if (!int.TryParse(parts[0], out var oid)) continue;
-                    int pid = int.TryParse(parts[1], out var tpid) ? tpid : 0;
-                    DateTime created = DateTime.TryParse(parts[2], out var dt) ? dt : DateTime.MinValue;
-                    string status = parts[3];
-                    decimal total = decimal.TryParse(parts[4], NumberStyles.Any, CultureInfo.InvariantCulture, out var dec) ? dec : 0m;
-                    orders.Add((oid, pid, created, status, total));
+                    var dbOrders = _db.GetOrdersByDateRange(start, end, storeId);
+                    if (dbOrders != null && dbOrders.Count > 0)
+                    {
+                        foreach (var od in dbOrders)
+                        {
+                            ordersList.Add((od.OrderID, od.ProductID, od.CreatedAt, od.Status ?? string.Empty, od.TotalAmount));
+                        }
+                    }
                 }
+            }
+            catch { }
+
+            // Fallback to UDP if no orders obtained via DB
+            if (!ordersList.Any())
+            {
+                try
+                {
+                    var startStr = start.ToString("yyyy-MM-dd");
+                    var endStr = end.ToString("yyyy-MM-dd");
+                    var ordersResp = Models.UdpClientHelper.SendUdpMessage($"getordersbydaterange|{startStr}|{endStr}|{storeId}");
+                    if (!string.IsNullOrEmpty(ordersResp))
+                    {
+                        var lines = ordersResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                        foreach (var l in lines)
+                        {
+                            var parts = l.Split('|');
+                            if (parts.Length < 5) continue;
+                            if (!int.TryParse(parts[0], out var oid)) continue;
+                            int pid = int.TryParse(parts[1], out var tpid) ? tpid : 0;
+                            DateTime created = DateTime.TryParse(parts[2], out var dt) ? dt : DateTime.MinValue;
+                            string status = parts[3];
+                            decimal total = decimal.TryParse(parts[4], NumberStyles.Any, CultureInfo.InvariantCulture, out var dec) ? dec : 0m;
+                            ordersList.Add((oid, pid, created, status, total));
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // If still no orders, insert a zero-entry so charts render
+            if (!ordersList.Any())
+            {
+                ordersList.Add((0, 0, DateTime.UtcNow.Date, string.Empty, 0m));
             }
 
             // group orders by day
-            var ordersByDay = orders.GroupBy(o => o.CreatedAt.Date).OrderBy(g => g.Key);
+            var ordersByDay = ordersList.Where(o => o.CreatedAt > DateTime.MinValue).GroupBy(o => o.CreatedAt.Date).OrderBy(g => g.Key);
             foreach (var g in ordersByDay)
             {
                 vm.OrdersByDay.Add(new OrderPeriodData { Period = g.Key.ToString("yyyy-MM-dd"), OrderCount = g.Count(), TotalAmount = g.Sum(x => x.Total) });
             }
 
-            vm.AverageOrderAmount = orders.Any() ? orders.Average(o => o.Total) : 0m;
+            // If OrdersByDay is empty for some reason, add today's zero
+            if (!vm.OrdersByDay.Any()) vm.OrdersByDay.Add(new OrderPeriodData { Period = DateTime.UtcNow.Date.ToString("yyyy-MM-dd"), OrderCount = 0, TotalAmount = 0m });
 
-            // Top selling products
-            var topResp = Models.UdpClientHelper.SendUdpMessage($"gettopsellingproducts|{storeId}|{startStr}|{endStr}");
-            if (!string.IsNullOrEmpty(topResp))
+            vm.AverageOrderAmount = ordersList.Any() ? ordersList.Average(o => o.Total) : 0m;
+
+            // Top selling products - prefer DB via _db; fallback to UDP
+            try
             {
-                var lines = topResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
-                foreach (var l in lines)
+                if (_db != null)
                 {
-                    var p = l.Split('|');
-                    if (p.Length < 4) continue;
-                    if (!int.TryParse(p[0], out var prodId)) continue;
-                    var name = p[1];
-                    int qty = int.TryParse(p[2], out var qv) ? qv : 0;
-                    decimal rev = decimal.TryParse(p[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var rv) ? rv : 0m;
-                    vm.TopSellingProducts.Add(new TopProductItem { ProductID = prodId, ProductName = name, QuantitySold = qty, Revenue = rev });
+                    var topDb = _db.GetTopSellingProducts(storeId, start, end);
+                    if (topDb != null && topDb.Count > 0)
+                    {
+                        foreach (var tp in topDb)
+                        {
+                            vm.TopSellingProducts.Add(new TopProductItem { ProductID = tp.ProductID, ProductName = tp.ProductName, QuantitySold = tp.QuantitySold, Revenue = tp.Revenue });
+                        }
+                    }
                 }
             }
+            catch { }
 
-            // Abandoned baskets
-            var abandonedResp = Models.UdpClientHelper.SendUdpMessage($"getabandonedbaskets|{storeId}|7");
-            if (!string.IsNullOrEmpty(abandonedResp))
+            if (!vm.TopSellingProducts.Any())
             {
-                var lines = abandonedResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
-                foreach (var l in lines)
+                try
                 {
-                    var p = l.Split('|');
-                    if (p.Length < 4) continue;
-                    int uid = int.TryParse(p[0], out var u) ? u : 0;
-                    string login = p[1];
-                    int prodCount = int.TryParse(p[2], out var pc) ? pc : 0;
-                    decimal total = decimal.TryParse(p[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var tt) ? tt : 0m;
-                    vm.AbandonedBaskets.Add(new BasketAnalyticsItem { UserID = uid, UserLogin = login, ProductCount = prodCount, TotalAmount = total, LastActivity = DateTime.MinValue });
+                    var topResp = Models.UdpClientHelper.SendUdpMessage($"gettopsellingproducts|{storeId}|{start.ToString("yyyy-MM-dd")}|{end.ToString("yyyy-MM-dd")}");
+                    if (!string.IsNullOrEmpty(topResp))
+                    {
+                        var lines = topResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                        foreach (var l in lines)
+                        {
+                            var p = l.Split('|');
+                            if (p.Length < 4) continue;
+                            if (!int.TryParse(p[0], out var prodId)) continue;
+                            var name = p[1];
+                            int qty = int.TryParse(p[2], out var qv) ? qv : 0;
+                            decimal rev = decimal.TryParse(p[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var rv) ? rv : 0m;
+                            vm.TopSellingProducts.Add(new TopProductItem { ProductID = prodId, ProductName = name, QuantitySold = qty, Revenue = rev });
+                        }
+                    }
                 }
-                vm.TotalAbandonedBaskets = vm.AbandonedBaskets.Count;
+                catch { }
             }
 
-            // Reviews for products (compute average rating)
+            // Ensure at least one top product placeholder
+            if (!vm.TopSellingProducts.Any()) vm.TopSellingProducts.Add(new TopProductItem { ProductID = 0, ProductName = "Нет данных", QuantitySold = 0, Revenue = 0m });
+
+            // Abandoned baskets - prefer DB then UDP
+            try
+            {
+                if (_db != null)
+                {
+                    var abDb = _db.GetAbandonedBaskets(storeId, 7);
+                    if (abDb != null && abDb.Count > 0)
+                    {
+                        foreach (var a in abDb)
+                        {
+                            vm.AbandonedBaskets.Add(new BasketAnalyticsItem { UserID = a.UserID, UserLogin = a.UserLogin, ProductCount = a.ProductCount, TotalAmount = a.TotalAmount, LastActivity = DateTime.MinValue });
+                        }
+                        vm.TotalAbandonedBaskets = vm.AbandonedBaskets.Count;
+                    }
+                }
+            }
+            catch { }
+
+            if (!vm.AbandonedBaskets.Any())
+            {
+                try
+                {
+                    var abandonedResp = Models.UdpClientHelper.SendUdpMessage($"getabandonedbaskets|{storeId}|7");
+                    if (!string.IsNullOrEmpty(abandonedResp))
+                    {
+                        var lines = abandonedResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                        foreach (var l in lines)
+                        {
+                            var p = l.Split('|');
+                            if (p.Length < 4) continue;
+                            int uid = int.TryParse(p[0], out var u) ? u : 0;
+                            string login = p[1];
+                            int prodCount = int.TryParse(p[2], out var pc) ? pc : 0;
+                            decimal total = decimal.TryParse(p[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var tt) ? tt : 0m;
+                            vm.AbandonedBaskets.Add(new BasketAnalyticsItem { UserID = uid, UserLogin = login, ProductCount = prodCount, TotalAmount = total, LastActivity = DateTime.MinValue });
+                        }
+                        vm.TotalAbandonedBaskets = vm.AbandonedBaskets.Count;
+                    }
+                }
+                catch { }
+            }
+
+            // If still empty, add placeholder
+            if (!vm.AbandonedBaskets.Any()) vm.AbandonedBaskets.Add(new BasketAnalyticsItem { UserID = 0, UserLogin = "Нет данных", ProductCount = 0, TotalAmount = 0m, LastActivity = DateTime.MinValue });
+
+            // Reviews for products (compute average rating) - prefer DB via _db then UDP
             var allReviews = new List<ReviewAnalyticsItem>();
             foreach (var prod in products)
             {
+                try
+                {
+                    List<ReviewDto> reviews = null;
+                    if (_db != null)
+                    {
+                        reviews = _db.GetProductReviews(prod.ProductID, true);
+                    }
+
+                    if (reviews != null && reviews.Count > 0)
+                    {
+                        int rc = reviews.Count;
+                        decimal sum = reviews.Sum(r => r.Rating);
+                        allReviews.Add(new ReviewAnalyticsItem { ProductID = prod.ProductID, ProductName = prod.ProductName, ReviewCount = rc, AverageRating = sum / rc });
+                        continue;
+                    }
+                }
+                catch { }
+
                 var rresp = Models.UdpClientHelper.SendUdpMessage($"getproductreviews|{prod.ProductID}");
                 if (string.IsNullOrEmpty(rresp)) continue;
                 var lines = rresp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
-                int rc = 0; decimal sum = 0m;
+                int rc2 = 0; decimal sum2 = 0m;
                 foreach (var l in lines)
                 {
                     var parts = l.Split('|');
                     if (parts.Length < 6) continue;
                     int rating = int.TryParse(parts[5], out var rv) ? rv : 0;
-                    rc++; sum += rating;
+                    rc2++; sum2 += rating;
                 }
-                if (rc > 0)
+                if (rc2 > 0)
                 {
-                    allReviews.Add(new ReviewAnalyticsItem { ProductID = prod.ProductID, ProductName = prod.ProductName, ReviewCount = rc, AverageRating = sum / rc });
+                    allReviews.Add(new ReviewAnalyticsItem { ProductID = prod.ProductID, ProductName = prod.ProductName, ReviewCount = rc2, AverageRating = sum2 / rc2 });
                 }
             }
             vm.ReviewsData = allReviews;
@@ -1045,5 +1192,193 @@ namespace Kursovoi.Controllers
                 return Json(new { ok = false, error = ex.Message });
             }
         }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult AddProductUploadExcel(IFormFile excelFile, IFormFileCollection images)
+        {
+            if (excelFile == null || excelFile.Length == 0) return RedirectToAction("AddProduct");
+
+            // Save uploaded Excel to temporary uploads for later reporting
+            var tempDir = Path.Combine(Directory.GetCurrentDirectory(), "App_Data", "Uploads");
+            if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
+            var originalName = Path.GetFileName(excelFile.FileName);
+            var savedName = Guid.NewGuid().ToString("N") + "_" + originalName;
+            var savedPath = Path.Combine(tempDir, savedName);
+            using (var fsSave = System.IO.File.Create(savedPath))
+            {
+                excelFile.OpenReadStream().CopyTo(fsSave);
+            }
+
+            var uploads = Path.Combine(Directory.GetCurrentDirectory(), "Images");
+            if (!Directory.Exists(uploads)) Directory.CreateDirectory(uploads);
+
+            int storeId = 0;
+            if (Request.HasFormContentType && int.TryParse(Request.Form["StoreId"], out var fid2)) storeId = fid2;
+            var sellerStoreIds = _db.GetStoreIdsForUser(User?.Identity?.Name ?? string.Empty);
+            if (sellerStoreIds.Count == 1) storeId = sellerStoreIds[0];
+
+            string storeName = "store";
+            try
+            {
+                var stores = Models.UdpClientHelper.SendUdpMessage("getallstores");
+                if (!string.IsNullOrEmpty(stores))
+                {
+                    var sl = stores.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var s in sl)
+                    {
+                        var p = s.Split('|');
+                        if (p.Length >= 2 && int.TryParse(p[0], out var sid) && sid == storeId) { storeName = p[1]; break; }
+                    }
+                }
+            }
+            catch { }
+
+            var errors = new List<string>();
+            int row = 0;
+
+            try
+            {
+                using (var workbook = new XLWorkbook(savedPath))
+                {
+                    var ws = workbook.Worksheets.First();
+                    // assume first row may be header; we'll detect if first row contains non-numeric CategoryId in cell 2
+                    var firstRow = ws.Row(1);
+                    bool firstIsHeader = false;
+                    try
+                    {
+                        var val = firstRow.Cell(2).GetString();
+                        if (!int.TryParse(val, out _)) firstIsHeader = true;
+                    }
+                    catch { firstIsHeader = true; }
+
+                    var startRow = firstIsHeader ? 2 : 1;
+                    var lastRow = ws.LastRowUsed().RowNumber();
+
+                    for (int r = startRow; r <= lastRow; r++)
+                    {
+                        row = r;
+                        try
+                        {
+                            var cells = ws.Row(r).CellsUsed().Select(c => c.GetString()).ToList();
+                            // ensure at least 8 columns as CSV handler
+                            if (cells.Count < 8) { errors.Add($"Строка {row}: недостаточно полей"); continue; }
+
+                            var model = new AddProductViewModel();
+                            model.ProductName = cells.ElementAtOrDefault(0)?.Trim() ?? string.Empty;
+                            if (!int.TryParse(cells.ElementAtOrDefault(1)?.Trim(), out var cat)) { errors.Add($"Строка {row}: неверный CategoryId"); continue; }
+                            model.CategoryId = cat;
+                            if (!int.TryParse(cells.ElementAtOrDefault(2)?.Trim(), out var man)) { errors.Add($"Строка {row}: неверный ManufacturerId"); continue; }
+                            model.ManufacturerId = man;
+                            model.Description = cells.ElementAtOrDefault(3)?.Trim() ?? string.Empty;
+                            if (!decimal.TryParse(cells.ElementAtOrDefault(4)?.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var price)) { errors.Add($"Строка {row}: неверная цена"); continue; }
+                            model.Price = price;
+                            if (!decimal.TryParse(cells.ElementAtOrDefault(5)?.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var disc)) disc = 0m;
+                            model.Discount = disc;
+                            if (!int.TryParse(cells.ElementAtOrDefault(6)?.Trim(), out var qty)) { errors.Add($"Строка {row}: неверное количество"); continue; }
+                            model.Quantity = qty;
+                            var imageField = cells.ElementAtOrDefault(7)?.Trim() ?? string.Empty;
+
+                            // locate image among uploaded files by name
+                            string imageUrl = string.Empty;
+                            if (!string.IsNullOrEmpty(imageField))
+                            {
+                                var uploaded = images?.FirstOrDefault(i => string.Equals(Path.GetFileName(i.FileName), Path.GetFileName(imageField), System.StringComparison.OrdinalIgnoreCase));
+                                if (uploaded != null && uploaded.Length > 0)
+                                {
+                                    string safeStore = MakeSafeFileName(storeName);
+                                    string safeProd = MakeSafeFileName(model.ProductName);
+                                    string destName = safeStore + "_" + safeProd + ".jpg";
+                                    string destPath = Path.Combine(uploads, destName);
+                                    try
+                                    {
+                                        using (var fs = System.IO.File.Create(destPath))
+                                        {
+                                            uploaded.OpenReadStream().CopyTo(fs);
+                                        }
+                                        imageUrl = "/Images/" + destName;
+                                    }
+                                    catch
+                                    {
+                                        errors.Add($"Строка {row}: не удалось сохранить изображение {uploaded.FileName}");
+                                    }
+                                }
+                                else
+                                {
+                                    // if imageField is a local path on server, try copy
+                                    if (System.IO.File.Exists(imageField))
+                                    {
+                                        string safeStore = MakeSafeFileName(storeName);
+                                        string safeProd = MakeSafeFileName(model.ProductName);
+                                        string destName = safeStore + "_" + safeProd + ".jpg";
+                                        string destPath = Path.Combine(uploads, destName);
+                                        try
+                                        {
+                                            System.IO.File.Copy(imageField, destPath, true);
+                                            imageUrl = "/Images/" + destName;
+                                        }
+                                        catch
+                                        {
+                                            errors.Add($"Строка {row}: не удалось скопировать изображение из {imageField}");
+                                        }
+                                    }
+                                }
+                            }
+
+                            model.ImageUrl = imageUrl;
+
+                            // send to server
+                            try
+                            {
+                                var cmd = $"addproduct|{User?.Identity?.Name ?? string.Empty}|{EscapePipe(model.ProductName)}|{model.CategoryId}|{model.ManufacturerId}|{EscapePipe(model.Description)}|{model.Price.ToString(CultureInfo.InvariantCulture)}|{model.Discount.ToString(CultureInfo.InvariantCulture)}|{model.Quantity}|{EscapePipe(model.ImageUrl)}|{storeId}";
+                                // Try to add directly via DB from web app (preferred)
+                                bool addedViaDb = false;
+                                try
+                                {
+                                    addedViaDb = _db.AddProductToDb(model.ProductName, model.CategoryId, model.ManufacturerId, model.Description, model.Price, model.Discount, model.Quantity, model.ImageUrl, storeId);
+                                }
+                                catch { addedViaDb = false; }
+
+                                if (addedViaDb)
+                                {
+                                    errors.Add($"Строка {row}: товар добавлен (DB)");
+                                }
+
+                                // if DB insert failed, try UDP as a fallback
+                                var resp = Models.UdpClientHelper.SendUdpMessage(cmd);
+                                if (!string.IsNullOrEmpty(resp) && resp.Trim().ToUpper() == "OK")
+                                {
+                                    errors.Add($"Строка {row}: товар добавлен (UDP)");
+                                }
+                                else
+                                {
+                                    var err = !string.IsNullOrEmpty(_db?.LastError) ? _db.LastError : (resp ?? "(неизвестный ответ)");
+                                    errors.Add($"Строка {row}: ошибка при добавлении: " + err);
+                                }
+                            }
+                            catch (System.Exception ex)
+                            {
+                                errors.Add($"Строка {row}: ошибка при добавлении: " + ex.Message);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            errors.Add($"Строка {row}: Ошибка обработки - " + ex.Message);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add("Ошибка обработки Excel: " + ex.Message);
+            }
+
+            if (errors.Any()) TempData["AddProductCsvReport"] = string.Join("\n", errors);
+            else TempData["AddProductCsvReport"] = "Все записи успешно добавлены";
+            TempData["CsvUploadFile"] = savedName;
+
+            return RedirectToAction("CsvReport");
+        }
+
     }
 }

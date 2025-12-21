@@ -486,6 +486,8 @@ namespace Kursovoi.Models
             return null;
         }
 
+
+
         public bool AddProductToDb(string name, int categoryId, int manufacturerId, string description, decimal price, decimal discount, int quantity, string imageUrl, int storeId = 0)
         {
             LastError = string.Empty;
@@ -666,5 +668,212 @@ namespace Kursovoi.Models
                 return false;
             }
         }
+
+        // Analytics methods
+        public List<OrderDto> GetOrdersByDateRange(DateTime startDate, DateTime endDate, int storeId = 0)
+        {
+            LastError = string.Empty;
+            var result = new List<OrderDto>();
+            if (string.IsNullOrWhiteSpace(_conn)) return result;
+            try
+            {
+                using (var c = CreateConnectionWithOptionalTrust(_conn))
+                {
+                    c.Open();
+                    string query = @"
+        SELECT o.OrderID, o.UserID, o.ProductID, o.CreatedAt, o.Status, o.TotalAmount, o.PaymentMethod, o.DeliveryAddress, o.StoreID,
+               u.Login AS UserLogin, p.ProductName
+        FROM dbo.[Order] o
+        INNER JOIN dbo.Users u ON o.UserID = u.UserID
+        LEFT JOIN dbo.Products p ON o.ProductID = p.ProductID
+        WHERE o.CreatedAt >= @StartDate AND o.CreatedAt <= @EndDate";
+                    if (storeId > 0) query += " AND o.StoreID = @StoreID";
+                    query += " ORDER BY o.CreatedAt DESC";
+
+                    using (var cmd = new SqlCommand(query, c))
+                    {
+                        cmd.Parameters.AddWithValue("@StartDate", startDate);
+                        cmd.Parameters.AddWithValue("@EndDate", endDate);
+                        if (storeId > 0) cmd.Parameters.AddWithValue("@StoreID", storeId);
+
+                        using (var rdr = cmd.ExecuteReader())
+                        {
+                            while (rdr.Read())
+                            {
+                                var od = new OrderDto
+                                {
+                                    OrderID = rdr.IsDBNull(rdr.GetOrdinal("OrderID")) ? 0 : rdr.GetInt32(rdr.GetOrdinal("OrderID")),
+                                    UserID = rdr.IsDBNull(rdr.GetOrdinal("UserID")) ? 0 : rdr.GetInt32(rdr.GetOrdinal("UserID")),
+                                    ProductID = rdr.IsDBNull(rdr.GetOrdinal("ProductID")) ? 0 : rdr.GetInt32(rdr.GetOrdinal("ProductID")),
+                                    CreatedAt = rdr.IsDBNull(rdr.GetOrdinal("CreatedAt")) ? DateTime.MinValue : rdr.GetDateTime(rdr.GetOrdinal("CreatedAt")),
+                                    Status = rdr.IsDBNull(rdr.GetOrdinal("Status")) ? string.Empty : rdr.GetString(rdr.GetOrdinal("Status")),
+                                    TotalAmount = rdr.IsDBNull(rdr.GetOrdinal("TotalAmount")) ? 0m : rdr.GetDecimal(rdr.GetOrdinal("TotalAmount")),
+                                    PaymentMethod = rdr.IsDBNull(rdr.GetOrdinal("PaymentMethod")) ? string.Empty : rdr.GetString(rdr.GetOrdinal("PaymentMethod")),
+                                    DeliveryAddress = rdr.IsDBNull(rdr.GetOrdinal("DeliveryAddress")) ? string.Empty : rdr.GetString(rdr.GetOrdinal("DeliveryAddress")),
+                                    StoreID = rdr.IsDBNull(rdr.GetOrdinal("StoreID")) ? 0 : rdr.GetInt32(rdr.GetOrdinal("StoreID")),
+                                    UserLogin = rdr.IsDBNull(rdr.GetOrdinal("UserLogin")) ? string.Empty : rdr.GetString(rdr.GetOrdinal("UserLogin")),
+                                    ProductName = rdr.IsDBNull(rdr.GetOrdinal("ProductName")) ? string.Empty : rdr.GetString(rdr.GetOrdinal("ProductName"))
+                                };
+                                result.Add(od);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+            }
+            return result;
+        }
+
+        public List<TopProductDto> GetTopSellingProducts(int storeId, DateTime startDate, DateTime endDate, int limit = 10)
+        {
+            LastError = string.Empty;
+            var result = new List<TopProductDto>();
+            if (string.IsNullOrWhiteSpace(_conn)) return result;
+            try
+            {
+                using (var c = CreateConnectionWithOptionalTrust(_conn))
+                {
+                    c.Open();
+                    string query = $@"
+            SELECT TOP ({limit}) p.ProductID, p.ProductName, COUNT(*) AS QuantitySold, SUM(o.TotalAmount) AS Revenue
+            FROM dbo.[Order] o
+            INNER JOIN dbo.Products p ON o.ProductID = p.ProductID
+            WHERE o.CreatedAt BETWEEN @StartDate AND @EndDate";
+                    if (storeId > 0) query += " AND o.StoreID = @StoreID";
+                    query += " GROUP BY p.ProductID, p.ProductName ORDER BY Revenue DESC, QuantitySold DESC";
+
+                    using (var cmd = new SqlCommand(query, c))
+                    {
+                        cmd.Parameters.AddWithValue("@StartDate", startDate);
+                        cmd.Parameters.AddWithValue("@EndDate", endDate);
+                        if (storeId > 0) cmd.Parameters.AddWithValue("@StoreID", storeId);
+
+                        using (var rdr = cmd.ExecuteReader())
+                        {
+                            while (rdr.Read())
+                            {
+                                var tp = new TopProductDto
+                                {
+                                    ProductID = rdr.IsDBNull(rdr.GetOrdinal("ProductID")) ? 0 : rdr.GetInt32(rdr.GetOrdinal("ProductID")),
+                                    ProductName = rdr.IsDBNull(rdr.GetOrdinal("ProductName")) ? string.Empty : rdr.GetString(rdr.GetOrdinal("ProductName")),
+                                    QuantitySold = rdr.IsDBNull(rdr.GetOrdinal("QuantitySold")) ? 0 : Convert.ToInt32(rdr.GetValue(rdr.GetOrdinal("QuantitySold"))),
+                                    Revenue = rdr.IsDBNull(rdr.GetOrdinal("Revenue")) ? 0m : rdr.GetDecimal(rdr.GetOrdinal("Revenue"))
+                                };
+                                result.Add(tp);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+            }
+            return result;
+        }
+
+        public List<AbandonedBasketDto> GetAbandonedBaskets(int storeId, int daysThreshold = 7)
+        {
+            LastError = string.Empty;
+            var result = new List<AbandonedBasketDto>();
+            if (string.IsNullOrWhiteSpace(_conn)) return result;
+            try
+            {
+                using (var c = CreateConnectionWithOptionalTrust(_conn))
+                {
+                    c.Open();
+                    string query = @"
+        SELECT DISTINCT b.UserID, u.Login,
+               COUNT(DISTINCT b.ProductID) as ProductCount,
+               SUM(b.Quantity * p.Price * (1 - p.Discount / 100.0)) as TotalAmount
+        FROM dbo.Basket b
+        INNER JOIN dbo.Users u ON b.UserID = u.UserID
+        INNER JOIN dbo.Products p ON b.ProductID = p.ProductID
+        WHERE p.StoreID = @StoreID
+          AND NOT EXISTS (
+              SELECT 1 FROM dbo.[Order] o
+              WHERE o.UserID = b.UserID
+                AND o.ProductID = b.ProductID
+                AND o.CreatedAt >= DATEADD(day, -@DaysThreshold, GETDATE())
+          )
+        GROUP BY b.UserID, u.Login
+        ORDER BY TotalAmount DESC";
+
+                    using (var cmd = new SqlCommand(query, c))
+                    {
+                        cmd.Parameters.AddWithValue("@StoreID", storeId);
+                        cmd.Parameters.AddWithValue("@DaysThreshold", daysThreshold);
+                        using (var rdr = cmd.ExecuteReader())
+                        {
+                            while (rdr.Read())
+                            {
+                                var ab = new AbandonedBasketDto
+                                {
+                                    UserID = rdr.IsDBNull(rdr.GetOrdinal("UserID")) ? 0 : rdr.GetInt32(rdr.GetOrdinal("UserID")),
+                                    UserLogin = rdr.IsDBNull(rdr.GetOrdinal("Login")) ? string.Empty : rdr.GetString(rdr.GetOrdinal("Login")),
+                                    ProductCount = rdr.IsDBNull(rdr.GetOrdinal("ProductCount")) ? 0 : rdr.GetInt32(rdr.GetOrdinal("ProductCount")),
+                                    TotalAmount = rdr.IsDBNull(rdr.GetOrdinal("TotalAmount")) ? 0m : rdr.GetDecimal(rdr.GetOrdinal("TotalAmount"))
+                                };
+                                result.Add(ab);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+            }
+            return result;
+        }
+
+        public List<ReviewDto> GetProductReviews(int productId, bool onlyApproved = true)
+        {
+            LastError = string.Empty;
+            var result = new List<ReviewDto>();
+            if (string.IsNullOrWhiteSpace(_conn) || productId <= 0) return result;
+            try
+            {
+                using (var c = CreateConnectionWithOptionalTrust(_conn))
+                {
+                    c.Open();
+                    string query = @"SELECT r.ReviewID, r.UserID, u.Login, r.Title, r.ReviewText, r.Rating, r.CreatedAt, r.IsApproved FROM dbo.ProductReviews r LEFT JOIN dbo.Users u ON r.UserID = u.UserID WHERE r.ProductID = @PRODUCTID";
+                    if (onlyApproved) query += " AND r.IsApproved = 1";
+                    query += " ORDER BY r.CreatedAt DESC";
+
+                    using (var cmd = new SqlCommand(query, c))
+                    {
+                        cmd.Parameters.AddWithValue("@PRODUCTID", productId);
+                        using (var rdr = cmd.ExecuteReader())
+                        {
+                            while (rdr.Read())
+                            {
+                                var r = new ReviewDto
+                                {
+                                    ReviewID = rdr.IsDBNull(rdr.GetOrdinal("ReviewID")) ? 0 : rdr.GetInt32(rdr.GetOrdinal("ReviewID")),
+                                    UserID = rdr.IsDBNull(rdr.GetOrdinal("UserID")) ? 0 : rdr.GetInt32(rdr.GetOrdinal("UserID")),
+                                    UserLogin = rdr.IsDBNull(rdr.GetOrdinal("Login")) ? string.Empty : rdr.GetString(rdr.GetOrdinal("Login")),
+                                    Title = rdr.IsDBNull(rdr.GetOrdinal("Title")) ? string.Empty : rdr.GetString(rdr.GetOrdinal("Title")),
+                                    ReviewText = rdr.IsDBNull(rdr.GetOrdinal("ReviewText")) ? string.Empty : rdr.GetString(rdr.GetOrdinal("ReviewText")),
+                                    Rating = rdr.IsDBNull(rdr.GetOrdinal("Rating")) ? 0 : rdr.GetInt32(rdr.GetOrdinal("Rating")),
+                                    CreatedAt = rdr.IsDBNull(rdr.GetOrdinal("CreatedAt")) ? DateTime.MinValue : rdr.GetDateTime(rdr.GetOrdinal("CreatedAt")),
+                                    IsApproved = rdr.IsDBNull(rdr.GetOrdinal("IsApproved")) ? false : rdr.GetBoolean(rdr.GetOrdinal("IsApproved"))
+                                };
+                                result.Add(r);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+            }
+            return result;
+        }
+
     }
 }

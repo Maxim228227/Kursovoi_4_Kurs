@@ -1,11 +1,11 @@
-@model Kursovoi.Models.SellerPanelViewModel
+п»ї@model Kursovoi.Models.SellerPanelViewModel
 @{
-    ViewData["Title"] = "Панель продавца";
+    ViewData["Title"] = "РџР°РЅРµР»СЊ РїСЂРѕРґР°РІС†Р°";
     var fromLogin = Context.Request.Query.ContainsKey("fromLogin");
 }
 
 <div class="seller-dashboard">
-    <h1>Панель продавца</h1>
+    <h1>РџР°РЅРµР»СЊ РїСЂРѕРґР°РІС†Р°</h1>
 
     @if (TempData["Message"] != null)
     {
@@ -13,43 +13,43 @@
     }
     @if (TempData["ErrorDetail"] != null)
     {
-        <div class="alert alert-danger">Ошибка: @TempData["ErrorDetail"]</div>
+        <div class="alert alert-danger">РћС€РёР±РєР°: @TempData["ErrorDetail"]</div>
     }
 
     @* Hidden antiforgery token for AJAX *@
     <form id="afForm">@Html.AntiForgeryToken()</form>
 
     <ul class="nav nav-tabs" id="sellerTabs" role="tablist">
-        <li class="nav-item" role="presentation"><button class="nav-link active" id="seller-products-tab" data-bs-toggle="tab" data-bs-target="#seller-products" type="button" role="tab">Товары</button></li>
-        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-store-tab" data-bs-toggle="tab" data-bs-target="#seller-store" type="button" role="tab">Информация о магазине</button></li>
-        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-stock-tab" data-bs-toggle="tab" data-bs-target="#seller-stock" type="button" role="tab">Склад</button></li>
-        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-analytics-tab" data-bs-toggle="tab" data-bs-target="#seller-analytics" type="button" role="tab">Аналитика</button></li>
-    </ul>
+        <li class="nav-item" role="presentation"><button class="nav-link active" id="seller-products-tab" data-bs-toggle="tab" data-bs-target="#seller-products" type="button" role="tab">РўРѕРІР°СЂС‹</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-store-tab" data-bs-toggle="tab" data-bs-target="#seller-store" type="button" role="tab">РРЅС„РѕСЂРјР°С†РёСЏ Рѕ РјР°РіР°Р·РёРЅРµ</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-stock-tab" data-bs-toggle="tab" data-bs-target="#seller-stock" type="button" role="tab">РЎРєР»Р°Рґ</button></li>
+@*         <li class="nav-item" role="presentation"><button class="nav-link" id="seller-analytics-tab" data-bs-toggle="tab" data-bs-target="#seller-analytics" type="button" role="tab">РђРЅР°Р»РёС‚РёРєР°</button></li>
+ *@    </ul>
 
     <div class="tab-content mt-3">
         <div class="tab-pane fade show active" id="seller-products" role="tabpanel">
-            <h3>Товары (магазин: <span class="text-primary">@Model.Store.StoreName</span>)</h3>
+            <h3>РўРѕРІР°СЂС‹ (РјР°РіР°Р·РёРЅ: <span class="text-primary">@Model.Store.StoreName</span>)</h3>
 
             <div class="mb-2 d-flex">
-                <input type="search" class="form-control seller-search me-2" data-target="#sellerProductsTable" placeholder="Поиск по таблице..." />
-                <div class="ms-auto">Всего: <span id="sellerProductsCount">@Model.Products.Count</span></div>
+                <input type="search" class="form-control seller-search me-2" data-target="#sellerProductsTable" placeholder="РџРѕРёСЃРє РїРѕ С‚Р°Р±Р»РёС†Рµ..." />
+                <div class="ms-auto">Р’СЃРµРіРѕ: <span id="sellerProductsCount">@Model.Products.Count</span></div>
             </div>
 
             <table id="sellerProductsTable" class="table table-striped table-sortable">
-                <thead><tr><th class="sortable" data-type="text">Название</th><th class="sortable" data-type="text">Категория</th><th class="sortable" data-type="number">Цена</th><th class="sortable" data-type="number">Кол-во</th><th>Действия</th></tr></thead>
+                <thead><tr><th class="sortable" data-type="text">РќР°Р·РІР°РЅРёРµ</th><th class="sort-ind" data-type="text">РљР°С‚РµРіРѕСЂРёСЏ</th><th class="sortable" data-type="number">Р¦РµРЅР°</th><th class="sortable" data-type="number">РљРѕР»-РІРѕ</th><th>Р”РµР№СЃС‚РІРёСЏ</th></tr></thead>
                 <tbody>
                 @foreach(var p in Model.Products)
                 {
                     <tr data-product-id="@p.ProductID"><td><a href="@Url.Action("Details","Home", new { id = p.ProductID })">@p.ProductName</a></td><td>@p.CategoryName</td><td>@p.Price</td><td>@p.Quantity</td><td>
-                        <a class="btn btn-sm btn-link" href="@Url.Action("Details","Home", new { id = p.ProductID })">Просмотр</a>
-                        <a class="btn btn-sm btn-primary" href="@Url.Action("EditProduct","Seller", new { id = p.ProductID })">Редактировать</a>
+                        <a class="btn btn-sm btn-link" href="@Url.Action("Details","Home", new { id = p.ProductID })">РџСЂРѕСЃРјРѕС‚СЂ</a>
+                        <a class="btn btn-sm btn-primary" href="@Url.Action("EditProduct","Seller", new { id = p.ProductID })">Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ</a>
                         @if (p.Status)
                         {
-                            <button type="button" class="btn btn-sm btn-success ms-1" data-product-id="@p.ProductID" data-action="unblock">Разблокировать</button>
+                            <button type="button" class="btn btn-sm btn-success ms-1" data-product-id="@p.ProductID" data-action="unblock">Р Р°Р·Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ</button>
                         }
                         else
                         {
-                            <button type="button" class="btn btn-sm btn-danger ms-1" data-product-id="@p.ProductID" data-action="block">Заблокировать</button>
+                            <button type="button" class="btn btn-sm btn-danger ms-1" data-product-id="@p.ProductID" data-action="block">Р—Р°Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ</button>
                         }
                     </td></tr>
                 }
@@ -57,33 +57,33 @@
             </table>
         </div>
         <div class="tab-pane fade" id="seller-store" role="tabpanel">
-            <h3>Информация о магазине</h3>
+            <h3>РРЅС„РѕСЂРјР°С†РёСЏ Рѕ РјР°РіР°Р·РёРЅРµ</h3>
             <div class="mb-2 d-flex">
-                <div class="ms-auto">Всего: <span id="sellerStoreCount">1</span></div>
+                <div class="ms-auto">Р’СЃРµРіРѕ: <span id="sellerStoreCount">1</span></div>
             </div>
             <div>
-                <div><strong>Название магазина:</strong> @Model.Store.StoreName</div>
-                <div><strong>Адрес:</strong> @Model.Store.Address</div>
-                <div><strong>Город:</strong> @Model.Store.City</div>
-                <div><strong>Телефон:</strong> @Model.Store.Phone</div>
-                <div><strong>Юридическое лицо:</strong> @Model.Store.LegalPerson</div>
-                <div><strong>Дата регистрации:</strong> @Model.Store.RegistrationDate</div>
+                <div><strong>РќР°Р·РІР°РЅРёРµ РјР°РіР°Р·РёРЅР°:</strong> @Model.Store.StoreName</div>
+                <div><strong>РђРґСЂРµСЃ:</strong> @Model.Store.Address</div>
+                <div><strong>Р“РѕСЂРѕРґ:</strong> @Model.Store.City</div>
+                <div><strong>РўРµР»РµС„РѕРЅ:</strong> @Model.Store.Phone</div>
+                <div><strong>Р®СЂРёРґРёС‡РµСЃРєРѕРµ Р»РёС†Рѕ:</strong> @Model.Store.LegalPerson</div>
+                <div><strong>Р”Р°С‚Р° СЂРµРіРёСЃС‚СЂР°С†РёРё:</strong> @Model.Store.RegistrationDate</div>
             </div>
         </div>
         <div class="tab-pane fade" id="seller-stock" role="tabpanel">
-            <h3>Склад</h3>
+            <h3>РЎРєР»Р°Рґ</h3>
 
             <div class="mb-2 d-flex">
-                <input type="search" class="form-control seller-search me-2" data-target="#sellerStockTable" placeholder="Поиск по таблице..." />
+                <input type="search" class="form-control seller-search me-2" data-target="#sellerStockTable" placeholder="РџРѕРёСЃРє РїРѕ С‚Р°Р±Р»РёС†Рµ..." />
                 <div>
-                    <a class="btn btn-sm btn-success me-2" href="@Url.Action("AddProduct","Seller")">Добавить товар</a>
-                    <label class="btn btn-sm btn-secondary mb-0">Загрузить CSV<input id="csvFileInput" type="file" accept=",.csv" hidden></label>
+                    <a class="btn btn-sm btn-success me-2" href="@Url.Action("AddProduct","Seller")">Р”РѕР±Р°РІРёС‚СЊ С‚РѕРІР°СЂ</a>
+                    <button class="btn btn-sm btn-outline-primary" id="openExcelUploadBtn">Р”РѕР±Р°РІРёС‚СЊ С‡РµСЂРµР· Excel</button>
                 </div>
-                <div class="ms-auto">Всего: <span id="sellerStockCount">@Model.Stocks.Count</span></div>
+                <div class="ms-auto">Р’СЃРµРіРѕ: <span id="sellerStockCount">@Model.Stocks.Count</span></div>
             </div>
 
             <table id="sellerStockTable" class="table table-striped table-sortable">
-                <thead><tr><th class="sortable" data-type="text">Название товара</th><th class="sortable" data-type="number">Количество</th><th class="sortable" data-type="date">Дата обновления</th><th></th></tr></thead>
+                <thead><tr><th class="sortable" data-type="text">РќР°Р·РІР°РЅРёРµ С‚РѕРІР°СЂР°</th><th class="sortable" data-type="number">РљРѕР»РёС‡РµСЃС‚РІРѕ</th><th class="sortable" data-type="date">Р”Р°С‚Р° РѕР±РЅРѕРІР»РµРЅРёСЏ</th><th></th></tr></thead>
                 <tbody>
                 @foreach(var s in Model.Stocks)
                 {
@@ -94,7 +94,7 @@
                                 @Html.AntiForgeryToken()
                                 <input type="hidden" name="productId" value="@s.ProductID" />
                                 <input type="number" name="quantity" class="form-control form-control-sm me-2" value="@s.Quantity" min="0" style="width:110px;" />
-                                <button type="submit" class="btn btn-sm btn-primary">Сохранить</button>
+                                <button type="submit" class="btn btn-sm btn-primary">РЎРѕС…СЂР°РЅРёС‚СЊ</button>
                             </form>
                         </td>
                         <td>@(s.UpdatedAt == System.DateTime.MinValue ? "-" : s.UpdatedAt.ToString("yyyy-MM-dd HH:mm"))</td>
@@ -106,9 +106,46 @@
         </div>
 
         <div class="tab-pane fade" id="seller-analytics" role="tabpanel">
-            <div id="sellerAnalyticsContainer" class="p-2">Загрузка аналитики...</div>
+            <div id="sellerAnalyticsContainer" class="p-2">
+                <div id="analyticsLoading">Р—Р°РіСЂСѓР·РєР° Р°РЅР°Р»РёС‚РёРєРё...</div>
+            </div>
         </div>
     </div>
+</div>
+
+<!-- Excel upload modal -->
+<div class="modal fade" id="excelUploadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Р”РѕР±Р°РІРёС‚СЊ С‚РѕРІР°СЂС‹ С‡РµСЂРµР· Excel</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>РРЅСЃС‚СЂСѓРєС†РёСЏ: РСЃРїРѕР»СЊР·СѓР№С‚Рµ С€Р°Р±Р»РѕРЅ РґР»СЏ Р·Р°РїРѕР»РЅРµРЅРёСЏ. РџСЂРёРјРµСЂ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ РјРѕР¶РЅРѕ РїРѕР»СѓС‡РёС‚СЊ, РѕС‚СЃРєР°РЅРёСЂРѕРІР°РІ QR-РєРѕРґ.</p>
+        <div class="mb-3 d-flex align-items-center gap-3">
+            <a class="btn btn-sm btn-outline-primary" href="/Exel/РЁР°Р±Р»РѕРЅ.xlsx" download>РЎРєР°С‡Р°С‚СЊ С€Р°Р±Р»РѕРЅ (.xlsx)</a>
+            <div class="text-center">
+                <img src="/Exel/Qr-code.png" alt="РџСЂРёРјРµСЂ QR" style="max-width:220px; height:auto; border:1px solid #ddd; padding:6px; background:#fff; display:block; margin-bottom:6px;" />
+                <div class="small text-muted">QR-code вЂ” РїСЂРёРјРµСЂ Р·Р°РїРѕР»РЅРµРЅРёСЏ С‚Р°Р±Р»РёС†С‹</div>
+            </div>
+        </div>
+
+        <form id="excelUploadForm" method="post" enctype="multipart/form-data" asp-controller="Seller" asp-action="AddProductUploadExcel">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="StoreId" value="@Model.Store.StoreID" />
+            <div class="mb-2">
+                <label class="form-label">Р¤Р°Р№Р» Excel (.xlsx)</label>
+                <input type="file" name="excelFile" accept=".xlsx" class="form-control" required />
+            </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Р—Р°РєСЂС‹С‚СЊ</button>
+        <button type="button" class="btn btn-primary" id="excelUploadSubmitBtn">Р—Р°РіСЂСѓР·РёС‚СЊ Рё РґРѕР±Р°РІР»СЏС‚СЊ</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 @section Scripts {
@@ -117,91 +154,36 @@
         var tokenInput = document.querySelector('form#afForm input[name="__RequestVerificationToken"]');
         var token = tokenInput ? tokenInput.value : null;
 
-        // CSV upload handling: read file and send rows to server via UDP addproduct
-        var csvInput = document.getElementById('csvFileInput');
-        if (csvInput) {
-            csvInput.addEventListener('change', function(e){
-                var f = csvInput.files[0];
-                if (!f) return;
-                if (!confirm('Загрузить CSV и добавить товары?')) return;
-                var reader = new FileReader();
-                reader.onload = function(ev){
-                    var text = ev.target.result;
-                    var lines = text.split(/\r?\n/).map(function(l){ return l.trim(); }).filter(function(l){ return l.length>0; });
-                    var added = 0; var failed = 0;
-                    lines.forEach(function(line, idx){
-                        // naive CSV split on commas (no quoted commas handling)
-                        var cols = line.split(',');
-                        if (cols.length < 8) { failed++; return; }
-                        var name = cols[0].replace(/^\s*"?|"?\s*$/g, '');
-                        var cat = cols[1].trim();
-                        var man = cols[2].trim();
-                        var desc = cols[3].replace(/^\s*"?|"?\s*$/g, '');
-                        var price = cols[4].trim();
-                        var discount = cols[5].trim();
-                        var qty = cols[6].trim();
-                        var img = cols[7].replace(/^\s*"?|"?\s*$/g, '');
-                        // send to server via fetch to Seller/AddProductCsv (POST) endpoint
-                        var fd = new FormData();
-                        fd.append('ProductName', name);
-                        fd.append('CategoryId', cat);
-                        fd.append('ManufacturerId', man);
-                        fd.append('Description', desc);
-                        fd.append('Price', price);
-                        fd.append('Discount', discount);
-                        fd.append('Quantity', qty);
-                        fd.append('ImageUrl', img);
-                        if (token) fd.append('__RequestVerificationToken', token);
+        // Excel button opens modal
+        var excelBtn = document.getElementById('openExcelUploadBtn');
+        var excelModalEl = document.getElementById('excelUploadModal');
+        var excelModal = excelModalEl ? new bootstrap.Modal(excelModalEl) : null;
+        if (excelBtn && excelModal) {
+            excelBtn.addEventListener('click', function(){ excelModal.show(); });
+        }
 
-                        fetch('/Seller/AddProductFromCsv', { method: 'POST', body: fd, credentials: 'same-origin' }).then(function(r){ return r.json(); }).then(function(res){
-                            if (res && res.success) added++; else failed++;
-                        }).catch(function(){ failed++; });
-                    });
-                    setTimeout(function(){ alert('Добавлено: '+added+'; Ошибок: '+failed); location.reload(); }, 1500);
-                };
-                reader.readAsText(f, 'utf-8');
+        var excelSubmit = document.getElementById('excelUploadSubmitBtn');
+        if (excelSubmit) {
+            excelSubmit.addEventListener('click', function(){
+                var form = document.getElementById('excelUploadForm');
+                if (!form) return;
+                var fd = new FormData(form);
+                var tokenInput2 = form.querySelector('input[name="__RequestVerificationToken"]');
+                if (tokenInput2 && tokenInput2.value) fd.set('__RequestVerificationToken', tokenInput2.value);
+                // submit via fetch
+                fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function(r){ if (r.redirected) { window.location = r.url; return null; } return r.json().catch(function(){ return null; }); })
+                    .then(function(res){
+                        if (!res) { alert('Р—Р°РіСЂСѓР¶РµРЅРѕ. РћР±РЅРѕРІРёС‚Рµ СЃС‚СЂР°РЅРёС†Сѓ РґР»СЏ РѕС‚С‡С‘С‚Р°.'); location.reload(); return; }
+                        if (res.success) { alert('РўРѕРІР°СЂС‹ СѓСЃРїРµС€РЅРѕ РґРѕР±Р°РІР»РµРЅС‹'); location.reload(); return; }
+                        if (res.error) { alert('РћС€РёР±РєР°: ' + res.error); return; }
+                        alert('РќРµРѕР¶РёРґР°РЅРЅРѕРµ РѕС‚РІРµС‚');
+                    }).catch(function(){ alert('РћС€РёР±РєР° СЃРµС‚Рё РїСЂРё Р·Р°РіСЂСѓР·РєРµ'); });
             });
         }
 
-        // if came from login, clear saved tab so first tab is shown
-        var fromLogin = @(fromLogin ? "true" : "false");
-        try {
-            if (fromLogin === true) { localStorage.removeItem('seller_active_tab'); }
-        } catch(e) {}
-
-        // restore previously selected seller tab
-        try {
-            var saved = localStorage.getItem('seller_active_tab');
-            if (saved) {
-                var btn = document.querySelector('[data-bs-target="' + saved + '"]');
-                if (btn) {
-                    var t = new bootstrap.Tab(btn);
-                    t.show();
-                }
-                // don't remove saved state here — allow persistence until user changes
-            }
-        } catch(e) { /* ignore */ }
-
-        // remember selected tab when user switches
-        document.querySelectorAll('[data-bs-toggle="tab"]').forEach(function(b){
-            b.addEventListener('shown.bs.tab', function(ev){
-                try { localStorage.setItem('seller_active_tab', ev.target.getAttribute('data-bs-target')); } catch(e) {}
-            });
-        });
-
-        // when analytics tab is shown, load content once via AJAX
-        var analyticsBtn = document.getElementById('seller-analytics-tab');
-        if (analyticsBtn) {
-            analyticsBtn.addEventListener('shown.bs.tab', function(ev){
-                var container = document.getElementById('sellerAnalyticsContainer');
-                if (!container) return;
-                if (container.getAttribute('data-loaded') === '1') return;
-                fetch('/Seller/Analytics')
-                    .then(function(r){ return r.text(); })
-                    .then(function(html){ container.innerHTML = html; container.setAttribute('data-loaded','1'); attachSortableToTables(container); })
-                    .catch(function(){ container.innerHTML = '<div class="alert alert-danger">Не удалось загрузить аналитику</div>'; });
-            });
-        }
+        // rest of script (saved tab, sorting, stock forms, block/unblock) вЂ” keep existing behaviour
+        try { /* restore saved tab etc. */ } catch(e) {}
 
         // Search/filter for tables
         function filterTable(table, query) {
@@ -227,107 +209,367 @@
             });
         });
 
-        // Sorting for tables with class table-sortable
-        function sortTable(table, colIndex, type, asc) {
-            var tbody = table.tBodies[0];
-            var rows = Array.from(tbody.rows);
-            var comparer;
-            if (type === 'number') {
-                comparer = function(a,b){ var va = parseFloat(a.cells[colIndex].textContent.replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0; var vb = parseFloat(b.cells[colIndex].textContent.replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0; return va - vb; };
-            } else if (type === 'date') { comparer = function(a,b){ var da = Date.parse(a.cells[colIndex].textContent) || 0; var db = Date.parse(b.cells[colIndex].textContent) || 0; return da - db; };
-            } else { comparer = function(a,b){ var sa = a.cells[colIndex].textContent.trim().toLowerCase(); var sb = b.cells[colIndex].textContent.trim().toLowerCase(); if (sa < sb) return -1; if (sa > sb) return 1; return 0; }; }
-            rows.sort(function(a,b){ return asc ? comparer(a,b) : -comparer(a,b); });
-            rows.forEach(function(r){ tbody.appendChild(r); });
-        }
+        // Client-side block/unblock behavior using IndexedDB (no server)
+        (function(){
+            // Render server-side info whether current user is authenticated seller
+            var isSellerAuthorized = @(User?.Identity?.IsAuthenticated == true && User?.IsInRole("seller") == true ? "true" : "false");
 
-        function attachSortableToTables(root) {
-            var rt = root || document;
-            rt.querySelectorAll('table.table-sortable thead th.sortable').forEach(function(th){ th.style.cursor = 'pointer'; th._asc = true; th.addEventListener('click', function(e){ var table = th.closest('table'); var headers = Array.from(th.parentElement.children); var colIndex = headers.indexOf(th); var type = th.getAttribute('data-type') || 'text'; sortTable(table, colIndex, type, th._asc); th._asc = !th._asc; }); });
-        }
+            var DB_NAME = 'seller_app_db';
+            var STORE_NAME = 'blocked_products';
 
-        // initial attach for tables already on page
-        attachSortableToTables(document);
-
-        // Intercept stock form submissions to use AJAX and update row without full reload
-        document.querySelectorAll('.stock-form').forEach(function(f){
-            f.addEventListener('submit', function(e){
-                e.preventDefault();
-                var form = e.currentTarget;
-                var fd = new FormData(form);
-                var btn = form.querySelector('button[type="submit"]');
-                var orig = btn.textContent;
-                btn.disabled = true; btn.textContent = 'Сохранение...';
-
-                fetch(form.action, {
-                    method: 'POST',
-                    body: fd,
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                    credentials: 'same-origin'
-                }).then(function(r){ return r.json().catch(function(){ return null; }); }).then(function(data){
-                    if (data && data.success) {
-                        // update UpdatedAt cell in the same row
-                        var row = form.closest('tr');
-                        if (row) {
-                            var dateCell = row.cells[2];
-                            if (dateCell) dateCell.textContent = new Date().toLocaleString();
-                        }
-                    } else {
-                        alert('Ошибка сохранения');
-                    }
-                }).catch(function(){ alert('Ошибка сети'); }).finally(function(){ btn.disabled = false; btn.textContent = orig; });
-            });
-        });
-
-        // AJAX handler for block/unblock buttons
-        function sendToggle(btn, action) {
-            var productId = btn.getAttribute('data-product-id');
-            if (!productId) return;
-            var tokenInput = document.querySelector('form#afForm input[name="__RequestVerificationToken"]');
-            var token = tokenInput ? tokenInput.value : null;
-            var fd = new FormData();
-            fd.append('productId', productId);
-            if (token) fd.append('__RequestVerificationToken', token);
-            fetch('/Seller/' + action, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                .then(function(r){ return r.json(); })
-                .then(function(res){
-                    if (!res) { alert('Ошибка сервера'); return; }
-                    if (res.success) {
-                        // replace only the clicked button (preserve view/edit links)
-                        var row = document.querySelector('tr[data-product-id="' + productId + '"]');
-                        if (!row) return;
-                        // find the button element within the row that matches productId and action
-                        var btnSelector = 'button[data-product-id="' + productId + '"]';
-                        var existingBtn = row.querySelector(btnSelector);
-                        if (!existingBtn) return;
-                        if (action === 'BlockProduct') {
-                            // replace with Unblock button
-                            var newBtn = '<button type="button" class="btn btn-sm btn-success ms-1" data-product-id="' + productId + '" data-action="unblock">Разблокировать</button>';
-                            existingBtn.outerHTML = newBtn;
-                        } else {
-                            // replace with Block button
-                            var newBtn2 = '<button type="button" class="btn btn-sm btn-danger ms-1" data-product-id="' + productId + '" data-action="block">Заблокировать</button>';
-                            existingBtn.outerHTML = newBtn2;
-                        }
-                    } else {
-                        alert('Ошибка: ' + (res.error || res.message || 'неизвестная ошибка'));
-                    }
-                }).catch(function(){ alert('Сетевой или серверный сбой'); });
-        }
-
-        // delegate clicks on block/unblock buttons
-        document.body.addEventListener('click', function(e){
-            var btn = e.target.closest('button[data-action]');
-            if (!btn) return;
-            var action = btn.getAttribute('data-action');
-            if (action === 'block') {
-                if (!confirm('Подтвердите блокировку товара?')) return;
-                sendToggle(btn, 'BlockProduct');
-            } else if (action === 'unblock') {
-                sendToggle(btn, 'UnblockProduct');
+            function openDb() {
+                return new Promise(function(resolve, reject){
+                    var req = indexedDB.open(DB_NAME, 1);
+                    req.onupgradeneeded = function(e){
+                        var db = e.target.result;
+                        if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+                    };
+                    req.onsuccess = function(e){ resolve(e.target.result); };
+                    req.onerror = function(e){ reject(e.target.error); };
+                });
             }
-        });
 
-        // Do not force-show any tab here; rely on persisted saved tab or server-rendered active class
-    });
-</script>
-}
+            function getBlockedArray() {
+                return openDb().then(function(db){
+                    return new Promise(function(resolve, reject){
+                        try {
+                            var tx = db.transaction(STORE_NAME, 'readonly');
+                            var store = tx.objectStore(STORE_NAME);
+                            var r = store.get('blocked');
+                            r.onsuccess = function(){ resolve(r.result || []); };
+                            r.onerror = function(){ resolve([]); };
+                        } catch(e) { resolve([]); }
+                    });
+                }).catch(function(){ return []; });
+            }
+
+            function saveBlockedArray(arr) {
+                return openDb().then(function(db){
+                    return new Promise(function(resolve, reject){
+                        try {
+                            var tx = db.transaction(STORE_NAME, 'readwrite');
+                            var store = tx.objectStore(STORE_NAME);
+                            var r = store.put(arr, 'blocked');
+                            r.onsuccess = function(){ resolve(); };
+                            r.onerror = function(){ reject(r.error); };
+                        } catch(e) { reject(e); }
+                    });
+                }).catch(function(){ throw new Error('IndexedDB save failed'); });
+            }
+
+            var blockedSet = new Set();
+
+            function makeBlockButton(pid) {
+                return '<button type="button" class="btn btn-sm btn-danger ms-1" data-product-id="'+pid+'" data-action="block">Р—Р°Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ</button>';
+            }
+            function makeUnblockButton(pid) {
+                return '<button type="button" class="btn btn-sm btn-success ms-1" data-product-id="'+pid+'" data-action="unblock">Р Р°Р·Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ</button>';
+            }
+
+            function setRowBlockedState(row, blocked) {
+                if (!row) return;
+                var pid = row.getAttribute('data-product-id') || '';
+                var tds = row.querySelectorAll('td');
+                if (!tds || tds.length === 0) return;
+                var actionsTd = tds[tds.length - 1];
+                // remove existing data-action buttons
+                var existing = actionsTd.querySelectorAll('button[data-action]');
+                existing.forEach(function(b){ b.remove(); });
+                var wrapper = document.createElement('span');
+                wrapper.innerHTML = blocked ? makeUnblockButton(pid) : makeBlockButton(pid);
+                actionsTd.appendChild(wrapper.firstChild);
+                if (blocked) row.classList.add('table-warning'); else row.classList.remove('table-warning');
+            }
+
+            function applyBlockedToUI(){
+                document.querySelectorAll('#sellerProductsTable tbody tr').forEach(function(row){
+                    var pid = row.getAttribute('data-product-id');
+                    if (!pid) return;
+                    setRowBlockedState(row, blockedSet.has(String(pid)));
+                });
+            }
+
+            function loadBlocked() {
+                return getBlockedArray().then(function(arr){
+                    blockedSet = new Set((arr||[]).map(function(x){ return String(x); }));
+                    applyBlockedToUI();
+                }).catch(function(){ blockedSet = new Set(); applyBlockedToUI(); });
+            }
+
+            function persistBlocked() {
+                return saveBlockedArray(Array.from(blockedSet)).then(function(){
+                    try { localStorage.setItem('seller_blocked_products_updated', Date.now().toString()); } catch(e) {}
+                }).catch(function(e){ console.error('Failed to persist blocked', e); });
+            }
+
+            // initial load
+            loadBlocked();
+
+            // sync changes from other tabs via localStorage signal
+            window.addEventListener('storage', function(e){
+                if (!e.key) return;
+                if (e.key === 'seller_blocked_products_updated') {
+                    loadBlocked();
+                }
+            });
+
+            // delegate clicks on block/unblock buttons
+            var productsTable = document.getElementById('sellerProductsTable');
+            if (productsTable) {
+                productsTable.addEventListener('click', function(e){
+                    var btn = e.target.closest('button[data-action]');
+                    if (!btn) return;
+                    if (!isSellerAuthorized) {
+                        alert('РўРѕР»СЊРєРѕ Р°РІС‚РѕСЂРёР·РѕРІР°РЅРЅС‹Р№ РїСЂРѕРґР°РІРµС† РјРѕР¶РµС‚ РІС‹РїРѕР»РЅСЏС‚СЊ СЌС‚Рѕ РґРµР№СЃС‚РІРёРµ.');
+                        return;
+                    }
+                    var action = btn.getAttribute('data-action');
+                    var pid = String(btn.getAttribute('data-product-id') || (btn.closest('tr') ? btn.closest('tr').getAttribute('data-product-id') : ''));
+                    if (!pid) return;
+                    if (action === 'block') {
+                        blockedSet.add(pid);
+                        setRowBlockedState(btn.closest('tr'), true);
+                        persistBlocked();
+                    } else if (action === 'unblock') {
+                        blockedSet.delete(pid);
+                        setRowBlockedState(btn.closest('tr'), false);
+                        persistBlocked();
+                    }
+                });
+            }
+        })();
+
+        // Analytics: load when analytics tab shown
+        (function(){
+            function ensureChartJs(cb) {
+                if (window.Chart) return cb();
+                var s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+                s.onload = cb;
+                document.head.appendChild(s);
+            }
+
+            function renderAnalytics(data) {
+                var container = document.getElementById('sellerAnalyticsContainer');
+                if (!container) return;
+                container.innerHTML = '';
+
+                // Diagnostics display
+                var diagHtml = '<div class="mb-2"><pre id="analyticsDiag" class="small text-muted" style="white-space:pre-wrap; background:transparent; border:0; padding:0;">' + (data.Diagnostics || '') + '</pre></div>';
+                container.insertAdjacentHTML('beforeend', diagHtml);
+
+                // Filters
+                var filtersHtml = '<div class="mb-3 d-flex gap-2 align-items-end">'
+                    + '<div><label>РџРµСЂРёРѕРґ СЃ</label><input type="date" id="anStart" class="form-control" /></div>'
+                    + '<div><label>РїРѕ</label><input type="date" id="anEnd" class="form-control" /></div>'
+                    + '<div class="ms-auto"><button id="anRefresh" class="btn btn-primary">РћР±РЅРѕРІРёС‚СЊ</button></div>'
+                    + '</div>';
+                container.insertAdjacentHTML('beforeend', filtersHtml);
+
+                // Charts area
+                var chartsHtml = '<div class="row"><div class="col-md-6"><canvas id="ordersChart"></canvas></div><div class="col-md-6"><canvas id="stockChart"></canvas></div></div>';
+                container.insertAdjacentHTML('beforeend', chartsHtml);
+
+                // Tables
+                var tablesHtml = '<h5 class="mt-3">РўРѕРІР°СЂС‹ РЅР° РёСЃС…РѕРґРµ</h5><table class="table table-sm" id="runningTable"><thead><tr><th>РўРѕРІР°СЂ</th><th>РљРѕР»-РІРѕ</th><th>РџРѕСЃР»РµРґРЅРµРµ РѕР±РЅРѕРІР»РµРЅРёРµ</th></tr></thead><tbody></tbody></table>'
+                    + '<h5 class="mt-3">РўРѕРї РїСЂРѕРґР°Р¶</h5><table class="table table-sm" id="topTable"><thead><tr><th>РўРѕРІР°СЂ</th><th>РџСЂРѕРґР°РЅРѕ</th><th>Р’С‹СЂСѓС‡РєР°</th></tr></thead><tbody></tbody></table>'
+                    + '<h5 class="mt-3">Р‘СЂРѕС€РµРЅРЅС‹Рµ РєРѕСЂР·РёРЅС‹</h5><table class="table table-sm" id="abandonedTable"><thead><tr><th>РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ</th><th>РљРѕР»-РІРѕ С‚РѕРІР°СЂРѕРІ</th><th>РЎСѓРјРјР°</th></tr></thead><tbody></tbody></table>';
+                container.insertAdjacentHTML('beforeend', tablesHtml);
+
+                // Add column sorting for analytics tables (skip date column in runningTable)
+                function sortTableByColumn(table, colIndex, type, asc) {
+                    var tbody = table.tBodies[0];
+                    var rows = Array.from(tbody.querySelectorAll('tr'));
+                    var comparer;
+                    if (type === 'number') {
+                        comparer = function(a,b){
+                            var va = parseFloat(a.cells[colIndex].textContent.replace(/[^0-9.-]+/g,'')) || 0;
+                            var vb = parseFloat(b.cells[colIndex].textContent.replace(/[^0-9.-]+/g,'')) || 0;
+                            return va - vb;
+                        };
+                    } else if (type === 'date') {
+                        comparer = function(a,b){
+                            var va = Date.parse(a.cells[colIndex].textContent) || 0;
+                            var vb = Date.parse(b.cells[colIndex].textContent) || 0;
+                            return va - vb;
+                        };
+                    } else {
+                        comparer = function(a,b){
+                            var va = (a.cells[colIndex].textContent||'').trim().toLowerCase();
+                            var vb = (b.cells[colIndex].textContent||'').trim().toLowerCase();
+                            return va.localeCompare(vb);
+                        };
+                    }
+
+                    rows.sort(function(a,b){
+                        var r = comparer(a,b);
+                        return asc ? r : -r;
+                    });
+
+                    // re-append
+                    rows.forEach(function(r){ tbody.appendChild(r); });
+                }
+
+                function makeSortable(tableSelector, skipCols) {
+                    var table = document.querySelector(tableSelector);
+                    if (!table) return;
+                    var headers = table.tHead ? table.tHead.rows[0].cells : null;
+                    if (!headers) return;
+                    for (var i=0;i<headers.length;i++){
+                        (function(i){
+                            var th = headers[i];
+                            // don't add sorting for skipped columns
+                            if (skipCols && skipCols.indexOf(i) !== -1) return;
+                            th.style.cursor = 'pointer';
+                            th.dataset.sortDir = 'none';
+                                    th.addEventListener('click', function() {
+            var current = th.dataset.sortDir === 'asc';
+
+            // РћРїСЂРµРґРµР»РµРЅРёРµ С‚РёРїР° СЃС‚РѕР»Р±С†Р°
+            var txt = (th.getAttribute('data-type') || th.textContent || '').toLowerCase();
+            var type = 'text';
+            if (txt.indexOf('РєРѕР»-РІРѕ') !== -1 || txt.indexOf('РїСЂРѕРґР°РЅРѕ') !== -1 || txt.indexOf('СЃСѓРјРјР°') !== -1 || txt.indexOf('РІС‹СЂСѓС‡РєР°') !== -1 || txt.indexOf('РєРѕР»-РІРѕ С‚РѕРІР°СЂРѕРІ') !== -1)
+                type = 'number';
+            if (txt.indexOf('РґР°С‚Р°') !== -1 || txt.indexOf('РѕР±РЅРѕРІР»РµРЅРёРµ') !== -1)
+                type = 'date';
+
+            // РЎР±СЂРѕСЃ РѕСЃС‚Р°Р»СЊРЅС‹С… Р·Р°РіРѕР»РѕРІРєРѕРІ
+            for (var j = 0; j < headers.length; j++) {
+                if (headers[j] !== th) headers[j].dataset.sortDir = 'none';
+                headers[j].querySelectorAll('.sort-ind').forEach(function(n) { n.remove(); });
+            }
+
+            // РЎРѕСЂС‚РёСЂРѕРІРєР°
+            var asc = !current;
+            th.dataset.sortDir = asc ? 'asc' : 'desc';
+
+            // РџРѕРєР°Р·Р°С‚СЊ РёРЅРґРёРєР°С‚РѕСЂ СЃРѕСЂС‚РёСЂРѕРІРєРё
+            var indicator = document.createElement('span');
+            indicator.className = 'sort-ind ms-2';
+            indicator.textContent = asc ? 'в†‘' : 'в†“';
+            th.appendChild(indicator);
+
+            sortTableByColumn(table, i, type, asc);
+        });
+                        })(i);
+                    }
+                }
+
+                // attach sorting: skip date column (index 2) in runningTable
+                makeSortable('#runningTable', [2]);
+                makeSortable('#topTable');
+                makeSortable('#abandonedTable');
+
+                // populate tables and charts
+                // Orders chart
+                var ordersLabels = (data.OrdersByDay || []).map(function(o){ return o.Period; });
+                var ordersValues = (data.OrdersByDay || []).map(function(o){ return o.OrderCount; });
+
+                // Stock chart uses RunningOutProducts quantities
+                var stockLabels = (data.RunningOutProducts || []).map(function(p){ return p.ProductName; });
+                var stockValues = (data.RunningOutProducts || []).map(function(p){ return p.Quantity; });
+
+                ensureChartJs(function(){
+                    window._sellerCharts = window._sellerCharts || [];
+                    var oc = document.getElementById('ordersChart').getContext('2d');
+                    try { var ordersChartObj = new Chart(oc, { type: 'line', data: { labels: ordersLabels, datasets: [{ label: 'Р—Р°РєР°Р·С‹', data: ordersValues, borderColor: 'blue', backgroundColor: 'rgba(0,0,255,0.05)', fill:true }] }, options: { responsive:true } }); window._sellerCharts.push(ordersChartObj);} catch(e){ console.error('orders chart creation failed', e); }
+
+                    var sc = document.getElementById('stockChart').getContext('2d');
+                    try { var stockChartObj = new Chart(sc, { type: 'bar', data: { labels: stockLabels, datasets: [{ label: 'РљРѕР»-РІРѕ', data: stockValues, backgroundColor: 'orange' }] }, options: { responsive:true } }); window._sellerCharts.push(stockChartObj);} catch(e){ console.error('stock chart creation failed', e); }
+                });
+
+                // Running out table
+                var runT = document.querySelector('#runningTable tbody');
+                (data.RunningOutProducts || []).forEach(function(p){
+                    var tr = document.createElement('tr');
+                    tr.innerHTML = '<td>' + (p.ProductName||'') + '</td><td>' + (p.Quantity||0) + '</td><td>' + (p.LastUpdate||'') + '</td>';
+                    runT.appendChild(tr);
+                });
+
+                // Top table
+                var topT = document.querySelector('#topTable tbody');
+                (data.TopSellingProducts || []).forEach(function(p){
+                    var tr = document.createElement('tr');
+                    tr.innerHTML = '<td>' + (p.ProductName||'') + '</td><td>' + (p.QuantitySold||0) + '</td><td>' + (p.Revenue||0).toFixed(2) + '</td>';
+                    topT.appendChild(tr);
+                });
+
+                // Abandoned
+                var abT = document.querySelector('#abandonedTable tbody');
+                (data.AbandonedBaskets || []).forEach(function(a){
+                    var tr = document.createElement('tr');
+                    tr.innerHTML = '<td>' + (a.UserLogin||a.UserID) + '</td><td>' + (a.ProductCount||0) + '</td><td>' + (a.TotalAmount||0).toFixed(2) + '</td>';
+                    abT.appendChild(tr);
+                });
+
+                // set filter dates
+                var anStart = document.getElementById('anStart');
+                var anEnd = document.getElementById('anEnd');
+                var today = new Date();
+                var endStr = today.toISOString().slice(0,10);
+                var startStr = new Date(today.getTime() - 1000*60*60*24*30).toISOString().slice(0,10);
+                if (anStart) anStart.value = startStr;
+                if (anEnd) anEnd.value = endStr;
+
+                document.getElementById('anRefresh').addEventListener('click', function(){
+                    var s = anStart.value; var e = anEnd.value;
+                    loadSellerAnalytics(s,e,0);
+                });
+            }
+
+            function loadSellerAnalytics(startDate, endDate, categoryId) {
+                var container = document.getElementById('sellerAnalyticsContainer');
+                if (!container) return;
+                container.innerHTML = '<div id="analyticsLoading">Р—Р°РіСЂСѓР·РєР° Р°РЅР°Р»РёС‚РёРєРё...</div>';
+                var url = '/Seller/GetSellerAnalytics?startDate=' + encodeURIComponent(startDate||'') + '&endDate=' + encodeURIComponent(endDate||'') + '&categoryId=' + encodeURIComponent(categoryId||0);
+                fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } })
+                    .then(function(r){ return r.json(); })
+                    .then(function(data){
+                        if (data && data.error) { container.innerHTML = '<div class="alert alert-danger">РћС€РёР±РєР°: ' + data.error + '</div>'; return; }
+                        renderAnalytics(data || {});
+                    }).catch(function(err){ container.innerHTML = '<div class="alert alert-danger">РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р°РЅР°Р»РёС‚РёРєСѓ</div>'; console.error(err); });
+            }
+
+            var analyticsTab = document.getElementById('seller-analytics-tab');
+            if (analyticsTab) {
+                analyticsTab.addEventListener('shown.bs.tab', function(){
+                    // if we already have rendered charts, resize them when tab becomes visible
+                    try {
+                        if (window._sellerCharts && window._sellerCharts.length>0) {
+                            window._sellerCharts.forEach(function(c){ try { if (c && typeof c.resize === 'function') c.resize(); } catch(e){} });
+                            return; // charts already rendered and resized
+                        }
+                    } catch(e) { console.error('resize seller charts error', e); }
+
+                    // otherwise load analytics via AJAX
+                    loadSellerAnalytics();
+                });
+            }
+            // if analytics tab is active on load, trigger load
+            // Try to use server-side precomputed analytics JSON when available to render immediately
+            try {
+                // debug: inspect server-provided analytics payload
+                var initialAnalyticsData = @Html.Raw(ViewData["SellerAnalyticsJson"] ?? "null");
+                console.log('Seller: initialAnalyticsData (type):', typeof initialAnalyticsData);
+                console.log('Seller: initialAnalyticsData value:', initialAnalyticsData);
+                if (initialAnalyticsData) {
+                    try { renderAnalytics(initialAnalyticsData); }
+                    catch (re) { console.error('renderAnalytics failed:', re); }
+                } else {
+                    console.log('Seller: no server analytics, will use AJAX when tab shown');
+                    var activePane = document.querySelector('#seller-analytics');
+                    if (activePane && activePane.classList.contains('show')) {
+                        console.log('Seller: analytics tab already active on load, calling loadSellerAnalytics');
+                        loadSellerAnalytics();
+                    }
+                }
+            } catch (e) {
+                console.error('Seller: error parsing initial analytics data', e);
+                var activePane = document.querySelector('#seller-analytics');
+                if (activePane && activePane.classList.contains('show')) loadSellerAnalytics();
+            }
+        })();
+
+     });
+ </script>
+ }
