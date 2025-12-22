@@ -36,6 +36,9 @@ namespace Kursovoi.Models
 
         // Diagnostics: debug info about DB/UDP calls
         public string Diagnostics { get; set; } = string.Empty;
+
+        // All products visible to this seller (for analytics view)
+        public List<ProductViewModel> AllProducts { get; set; } = new List<ProductViewModel>();
     }
 
     public class StockAnalyticsItem

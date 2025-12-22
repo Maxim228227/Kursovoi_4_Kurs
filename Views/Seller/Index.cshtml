@@ -23,8 +23,8 @@
         <li class="nav-item" role="presentation"><button class="nav-link active" id="seller-products-tab" data-bs-toggle="tab" data-bs-target="#seller-products" type="button" role="tab">Товары</button></li>
         <li class="nav-item" role="presentation"><button class="nav-link" id="seller-store-tab" data-bs-toggle="tab" data-bs-target="#seller-store" type="button" role="tab">Информация о магазине</button></li>
         <li class="nav-item" role="presentation"><button class="nav-link" id="seller-stock-tab" data-bs-toggle="tab" data-bs-target="#seller-stock" type="button" role="tab">Склад</button></li>
-@*         <li class="nav-item" role="presentation"><button class="nav-link" id="seller-analytics-tab" data-bs-toggle="tab" data-bs-target="#seller-analytics" type="button" role="tab">Аналитика</button></li>
- *@    </ul>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="seller-analytics-tab" data-bs-toggle="tab" data-bs-target="#seller-analytics" type="button" role="tab">Аналитика</button></li>
+   </ul>
 
     <div class="tab-content mt-3">
         <div class="tab-pane fade show active" id="seller-products" role="tabpanel">
@@ -354,17 +354,15 @@
                 if (!container) return;
                 container.innerHTML = '';
 
-                // Diagnostics display
-                var diagHtml = '<div class="mb-2"><pre id="analyticsDiag" class="small text-muted" style="white-space:pre-wrap; background:transparent; border:0; padding:0;">' + (data.Diagnostics || '') + '</pre></div>';
-                container.insertAdjacentHTML('beforeend', diagHtml);
+                // Diagnostics display removed for production UI
 
                 // Filters
-                var filtersHtml = '<div class="mb-3 d-flex gap-2 align-items-end">'
-                    + '<div><label>Период с</label><input type="date" id="anStart" class="form-control" /></div>'
-                    + '<div><label>по</label><input type="date" id="anEnd" class="form-control" /></div>'
-                    + '<div class="ms-auto"><button id="anRefresh" class="btn btn-primary">Обновить</button></div>'
-                    + '</div>';
-                container.insertAdjacentHTML('beforeend', filtersHtml);
+                // var filtersHtml = '<div class="mb-3 d-flex gap-2 align-items-end">'
+                //     + '<div><label>Период с</label><input type="date" id="anStart" class="form-control" /></div>'
+                //     + '<div><label>по</label><input type="date" id="anEnd" class="form-control" /></div>'
+                //     + '<div class="ms-auto"><button id="anRefresh" class="btn btn-primary">Обновить</button></div>'
+                //     + '</div>';
+                // container.insertAdjacentHTML('beforeend', filtersHtml);
 
                 // Charts area
                 var chartsHtml = '<div class="row"><div class="col-md-6"><canvas id="ordersChart"></canvas></div><div class="col-md-6"><canvas id="stockChart"></canvas></div></div>';
@@ -501,6 +499,23 @@
                     tr.innerHTML = '<td>' + (a.UserLogin||a.UserID) + '</td><td>' + (a.ProductCount||0) + '</td><td>' + (a.TotalAmount||0).toFixed(2) + '</td>';
                     abT.appendChild(tr);
                 });
+
+                // All products for this seller (show full list regardless of stock threshold)
+                try {
+                    var allHtml = '<h5 class="mt-3">Все товары магазина</h5>' +
+                        '<table class="table table-sm" id="allProductsTable"><thead><tr><th>ID</th><th>Товар</th><th>Категория</th><th>Кол-во</th><th>Цена</th></tr></thead><tbody></tbody></table>';
+                    container.insertAdjacentHTML('beforeend', allHtml);
+                    var allT = document.querySelector('#allProductsTable tbody');
+                    (data.AllProducts || []).forEach(function(p){
+                        var tr = document.createElement('tr');
+                        tr.innerHTML = '<td>' + (p.ProductID||'') + '</td>' +
+                                       '<td>' + (p.ProductName||'') + '</td>' +
+                                       '<td>' + (p.CategoryName||'') + '</td>' +
+                                       '<td>' + (p.Quantity||0) + '</td>' +
+                                       '<td>' + (typeof p.Price !== 'undefined' ? (+p.Price).toFixed(2) : '') + '</td>';
+                        allT.appendChild(tr);
+                    });
+                } catch(e) { console.error('render all products failed', e); }
 
                 // set filter dates
                 var anStart = document.getElementById('anStart');

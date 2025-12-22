@@ -21,7 +21,7 @@ namespace Kursovoi.Controllers
             _db = db;
         }
 
-        // GET: /Seller/Index
+        // GET: /Seller/Index (открыть панель продавца)
         public IActionResult Index()
         {
             var vm = new SellerPanelViewModel
@@ -33,15 +33,15 @@ namespace Kursovoi.Controllers
 
             try
             {
-                // fetch all products from server
+                // получить все товары с сервера
                 var prodResp = Models.UdpClientHelper.SendUdpMessage("getproducts");
                 vm.Products = ParseProducts(prodResp);
 
-                // fetch all stores
+                // получить все магазины
                 var storesResp = Models.UdpClientHelper.SendUdpMessage("getallstores");
                 var stores = ParseStores(storesResp);
 
-                // attempt to find current seller's store by matching user's login -> user's StoreID (if available in getusers)
+                // попытка найти магазин текущего продавца, сопоставив логин пользователя -> StoreID (если возвращается в getusers)
                 int sellerStoreId = 0;
                 try
                 {
@@ -55,7 +55,7 @@ namespace Kursovoi.Controllers
                             if (parts.Length < 2) continue;
                             if (string.Equals(parts[1].Trim(), User?.Identity?.Name ?? string.Empty, System.StringComparison.OrdinalIgnoreCase))
                             {
-                                // try to read StoreID if server returns it as 7th column
+                                // попытка прочитать StoreID если сервер возвращает его как 7-ю колонку
                                 if (parts.Length >= 7 && int.TryParse(parts[6], out var sid)) sellerStoreId = sid;
                                 break;
                             }
@@ -64,7 +64,7 @@ namespace Kursovoi.Controllers
                 }
                 catch { }
 
-                // if we didn't get store id from users list try to infer from products where Login may match store linkage - fallback: if seller has any product, take its StoreID
+                // если не получили id магазина из списка пользователей, попытаться вывести из товаров — запас: если у продавца есть товар, взять его StoreID
                 if (sellerStoreId == 0 && vm.Products.Any())
                 {
                     var first = vm.Products.FirstOrDefault();
@@ -77,7 +77,7 @@ namespace Kursovoi.Controllers
                     if (store != null) vm.Store = store;
                 }
 
-                // build stocks list for this store: show product name, quantity and last update
+                // собрать список складских остатков для этого магазина: показать название товара, количество и время последнего обновления
                 var stocks = new List<StockViewModel>();
                 foreach (var p in vm.Products.Where(p => sellerStoreId == 0 || p.StoreID == sellerStoreId))
                 {
@@ -85,7 +85,7 @@ namespace Kursovoi.Controllers
                 }
                 vm.Stocks = stocks;
 
-                // filter products shown to seller (if we have store id)
+                // отфильтровать товары, отображаемые продавцу (если известен store id)
                 if (sellerStoreId != 0)
                 {
                     vm.Products = vm.Products.Where(p => p.StoreID == sellerStoreId).ToList();
@@ -93,13 +93,13 @@ namespace Kursovoi.Controllers
             }
             catch
             {
-                // ignore network errors; return empty model
+                // игнорировать сетевые ошибки; вернуть пустую модель
             }
 
-            // Set top-right store name for layout (fallback to default)
+            // установить название магазина в правом верхнем углу макета (запас по умолчанию)
             ViewData["TopRightStoreName"] = string.IsNullOrEmpty(vm.Store?.StoreName) ? "МаркетPRO" : vm.Store.StoreName;
 
-            // Precompute analytics JSON for client to render immediately (fallback when AJAX/UDP fails in browser)
+            // заранее вычислить JSON аналитики для клиента, чтобы рендерить сразу (запас на случай падения AJAX/UDP в браузере)
             try
             {
                 var end = System.DateTime.UtcNow.Date;
@@ -129,20 +129,20 @@ namespace Kursovoi.Controllers
             return RedirectToAction("Index");
         }
 
-        // NEW ACTIONS AND HELPERS FOR ADDING PRODUCT
+        // НОВЫЕ ДЕЙСТВИЯ И ХЕЛПЕРЫ ДЛЯ ДОБАВЛЕНИЯ ТОВАРА
 
         [HttpGet]
         public IActionResult AddProduct()
         {
             var vm = new AddProductViewModel();
-            // fetch categories and manufacturers to ViewData
+            // получить категории и производителей в ViewData
             ViewData["Categories"] = GetCategories();
             ViewData["Manufacturers"] = GetManufacturers();
 
-            // pass seller's store options (may be zero, one or many)
+            // передать опции магазинов продавца (может быть 0, 1 или несколько)
             var storeIds = _db.GetStoreIdsForUser(User?.Identity?.Name ?? string.Empty);
             var storeOptions = new List<KeyValuePair<int,string>>();
-            // get store names from UDP and map
+            // получить имена магазинов через UDP и сопоставить
             var storesResp = Models.UdpClientHelper.SendUdpMessage("getallstores");
             var storeMap = ParseStores(storesResp).ToDictionary(s => s.StoreID, s => s.StoreName);
             foreach (var sid in storeIds)
@@ -152,7 +152,7 @@ namespace Kursovoi.Controllers
             }
             ViewData["StoreOptions"] = storeOptions;
 
-            // for compatibility, set StoreId/StoreName for single-store users
+            // для совместимости: установить StoreId/StoreName для пользователей с одним магазином
             ViewData["StoreId"] = storeIds.Count == 1 ? storeIds[0] : 0;
             ViewData["StoreName"] = storeIds.Count == 1 && storeOptions.Count>0 ? storeOptions[0].Value : string.Empty;
             return View(vm);
@@ -166,7 +166,7 @@ namespace Kursovoi.Controllers
             {
                 ViewData["Categories"] = GetCategories();
                 ViewData["Manufacturers"] = GetManufacturers();
-                // restore store options
+                // восстановить опции магазинов
                 var storeIds = _db.GetStoreIdsForUser(User?.Identity?.Name ?? string.Empty);
                 var storeOptions = BuildStoreOptions(storeIds);
                 ViewData["StoreOptions"] = storeOptions;
@@ -182,17 +182,17 @@ namespace Kursovoi.Controllers
                 return View(model);
             }
 
-            // get seller's associated stores
+            // получить магазины, связанные с продавцом
             var sellerStoreIds = _db.GetStoreIdsForUser(User?.Identity?.Name ?? string.Empty);
 
-            // prefer StoreId posted from client
+            // предпочесть StoreId, отправленный клиентом
             int storeId = 0;
             if (Request.HasFormContentType && int.TryParse(Request.Form["StoreId"], out var fid)) storeId = fid;
 
-            // Validation: determine effective storeId according to rules
+            // Валидация: определить реальный storeId по правилам
             if (sellerStoreIds.Count == 0)
             {
-                // user has no stores
+                // у пользователя нет привязанных магазинов
                 ModelState.AddModelError(string.Empty, "У вас не привязан ни один магазин. Обратитесь к администратору или укажите StoreID явно.");
 
                 ViewData["Categories"] = GetCategories();
@@ -203,12 +203,12 @@ namespace Kursovoi.Controllers
             }
             else if (sellerStoreIds.Count == 1)
             {
-                // single store: use it regardless of posted value
+                // один магазин: использовать его независимо от переданного значения
                 storeId = sellerStoreIds[0];
             }
             else
             {
-                // multiple stores: require explicit storeId and verify access
+                // несколько магазинов: требовать явный storeId и проверять доступ
                 if (storeId <= 0 || !sellerStoreIds.Contains(storeId))
                 {
                     ModelState.AddModelError(string.Empty, "У вас несколько магазинов. Укажите StoreID, к которому вы хотите добавить товар.");
@@ -221,7 +221,7 @@ namespace Kursovoi.Controllers
                 }
             }
 
-            // Handle uploaded image file
+            // Обработка загруженного изображения
             if (imageFile != null && imageFile.Length > 0)
             {
                 try
@@ -242,7 +242,7 @@ namespace Kursovoi.Controllers
                 }
                 catch (System.Exception ex)
                 {
-                    // report file save error and return so user can act
+                    // сообщить об ошибке сохранения файла и вернуть форму, чтобы пользователь мог исправить
                     ModelState.AddModelError(string.Empty, "Ошибка при сохранении файла изображения: " + ex.Message);
                     ViewData["Categories"] = GetCategories();
                     ViewData["Manufacturers"] = GetManufacturers();
@@ -261,7 +261,7 @@ namespace Kursovoi.Controllers
 
             try
             {
-                // Try to add directly via DB from web app (preferred)
+                // Попытка добавить напрямую в БД (предпочтительно)
                 bool addedViaDb = false;
                 try
                 {
@@ -276,7 +276,7 @@ namespace Kursovoi.Controllers
                     return RedirectToAction("Index");
                 }
 
-                // fallback to UDP
+                // резервный путь через UDP
                 var resp = Models.UdpClientHelper.SendUdpMessage($"addproduct|{User?.Identity?.Name ?? string.Empty}|{EscapePipe(model.ProductName)}|{model.CategoryId}|{model.ManufacturerId}|{EscapePipe(model.Description)}|{model.Price.ToString(CultureInfo.InvariantCulture)}|{model.Discount.ToString(CultureInfo.InvariantCulture)}|{model.Quantity}|{EscapePipe(model.ImageUrl)}|{storeId}");
                 if (!string.IsNullOrEmpty(resp) && resp.Trim().ToUpper() == "OK")
                 {
@@ -313,7 +313,7 @@ namespace Kursovoi.Controllers
         public IActionResult AddProductFromCsv(AddProductViewModel model)
         {
             if (model == null) return Json(new { success = false });
-            // determine store similar to AddProduct
+            // определить магазин аналогично AddProduct
             var sellerStoreIds = _db.GetStoreIdsForUser(User?.Identity?.Name ?? string.Empty);
             int storeId = 0;
             if (Request.HasFormContentType && int.TryParse(Request.Form["StoreId"], out var fid)) storeId = fid;
@@ -337,7 +337,7 @@ namespace Kursovoi.Controllers
         {
             if (csvFile == null || csvFile.Length == 0) return RedirectToAction("AddProduct");
 
-            // Save uploaded CSV to temporary uploads for later reporting
+            // сохранить загруженный CSV во временную папку для последующего отчёта
             var tempDir = Path.Combine(Directory.GetCurrentDirectory(), "App_Data", "Uploads");
             if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
             var originalName = Path.GetFileName(csvFile.FileName);
@@ -402,7 +402,7 @@ namespace Kursovoi.Controllers
                         model.Quantity = qty;
                         var imageField = fields[7].Trim();
 
-                        // locate image among uploaded files by name
+                        // найти изображение среди загруженных файлов по имени
                         string imageUrl = string.Empty;
                         if (!string.IsNullOrEmpty(imageField))
                         {
@@ -428,7 +428,7 @@ namespace Kursovoi.Controllers
                             }
                             else
                             {
-                                // if imageField is a local path on server, try copy
+                                // если imageField — локальный путь на сервере, попробовать скопировать
                                 if (System.IO.File.Exists(imageField))
                                 {
                                     string safeStore = MakeSafeFileName(storeName);
@@ -450,11 +450,11 @@ namespace Kursovoi.Controllers
 
                         model.ImageUrl = imageUrl;
 
-                        // send to server
+                        // отправить на сервер
                         try
                         {
                             var cmd = $"addproduct|{User?.Identity?.Name ?? string.Empty}|{EscapePipe(model.ProductName)}|{model.CategoryId}|{model.ManufacturerId}|{EscapePipe(model.Description)}|{model.Price.ToString(CultureInfo.InvariantCulture)}|{model.Discount.ToString(CultureInfo.InvariantCulture)}|{model.Quantity}|{EscapePipe(model.ImageUrl)}|{storeId}";
-                            // Try to add directly via DB from web app (preferred)
+                            // Попытка добавить напрямую в БД (предпочтительно)
                             bool addedViaDb = false;
                             try
                             {
@@ -467,7 +467,7 @@ namespace Kursovoi.Controllers
                                 errors.Add($"Строка {row}: товар добавлен (DB)");
                             }
 
-                            // if DB insert failed, try UDP as a fallback
+                            // если вставка в БД не удалась, попробовать через UDP как запасной путь
                             var resp = Models.UdpClientHelper.SendUdpMessage(cmd);
                             if (!string.IsNullOrEmpty(resp) && resp.Trim().ToUpper() == "OK")
                             {
@@ -484,16 +484,16 @@ namespace Kursovoi.Controllers
                             errors.Add($"Строка {row}: ошибка при добавлении: " + ex.Message);
                         }
                     }
-                    catch (Exception exRow)
+                    catch (Exception ex)
                     {
-                        errors.Add($"Строка {row}: Ошибка чтения строки - " + exRow.Message);
+                        errors.Add($"Строка {row}: Ошибка обработки - " + ex.Message);
                     }
                 }
             }
 
             if (errors.Any()) TempData["AddProductCsvReport"] = string.Join("\n", errors);
             else TempData["AddProductCsvReport"] = "Все записи успешно добавлены";
-            // keep saved file name for report viewing
+            // сохранить имя файла для просмотра отчёта
             TempData["CsvUploadFile"] = savedName;
 
             return RedirectToAction("CsvReport");
@@ -547,7 +547,7 @@ namespace Kursovoi.Controllers
                 if (string.IsNullOrEmpty(resp)) return null;
                 var lines = resp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
                 int storeId = 0;
-                // try to get seller's store id from getusers
+                // попытка получить id магазина продавца через getusers
                 var users = Models.UdpClientHelper.SendUdpMessage("getusers");
                 if (!string.IsNullOrEmpty(users))
                 {
@@ -638,7 +638,7 @@ namespace Kursovoi.Controllers
             foreach (var l in lines)
             {
                 var p = l.Split('|');
-                // require at least ID and Name
+                // требовать как минимум ID и имя
                 if (p.Length < 2) continue;
                 if (!int.TryParse(p[0], out var id)) continue;
                 var prod = new ProductViewModel
@@ -650,7 +650,7 @@ namespace Kursovoi.Controllers
                     Country = p.Length > 4 ? p[4] : string.Empty,
                     Description = p.Length > 5 ? p[5] : string.Empty,
                     IsActive = p.Length > 6 && bool.TryParse(p[6], out var act) && act,
-                    // Some servers may return different column counts; parse common fields defensively
+                    // сервер может возвращать разное количество колонок; парсим необходимые поля с запасом
                     StoreName = p.Length > 9 ? p[9] : string.Empty,
                     Address = p.Length > 10 ? p[10] : string.Empty,
                     City = p.Length > 11 ? p[11] : string.Empty,
@@ -662,7 +662,7 @@ namespace Kursovoi.Controllers
                     StoreID = p.Length > 17 && int.TryParse(p[17], out var sid) ? sid : 0
                  };
 
-                 // parse stock last update if provided as last column
+                 // парсить время последнего обновления склада, если оно передано в последней колонке
                 if (p.Length > 18 && DateTime.TryParse(p[18], out var stockUpd)) prod.StockUpdatedAt = stockUpd;
                 else if (p.Length > 8 && DateTime.TryParse(p[8], out var updatedAt)) prod.StockUpdatedAt = updatedAt;
 
@@ -682,7 +682,7 @@ namespace Kursovoi.Controllers
                 if (p.Length < 6) continue;
                 if (!int.TryParse(p[0], out var id)) continue;
                 var store = new StoreViewModel { StoreID = id, StoreName = p[1], Address = p[2], City = p[3], Phone = p[4], LegalPerson = p[5] };
-                // server now returns RegistrationDate at p[6] and Status at p[7]
+                // сервер теперь может возвращать дату регистрации в п[6] и статус в п[7]
                 if (p.Length > 6) store.RegistrationDate = p[6];
                 if (p.Length > 7 && bool.TryParse(p[7], out var st)) store.Status = st;
                 list.Add(store);
@@ -705,19 +705,19 @@ namespace Kursovoi.Controllers
         public IActionResult Analytics()
         {
             var model = new SellerAnalyticsViewModel();
-            // set categories for filter dropdown
+            // задать категории для выпадающего списка фильтра
             ViewBag.Categories = GetCategories();
 
-            // populate basic store id
+            // заполнить базовый store id
             model.StoreId = GetSellerStoreId();
 
-            // default date range: last 30 days
+            // диапазон по умолчанию: последние 60 дней
             var end = System.DateTime.UtcNow.Date;
-            var start = end.AddDays(-30);
+            var start = end.AddDays(-60);
 
             try
             {
-                // reuse GetSellerAnalytics logic to fill model
+                // повторно использовать логику GetSellerAnalytics для заполнения модели
                 var json = GetSellerAnalyticsInternal(start, end, 0);
                 if (json != null)
                 {
@@ -734,13 +734,13 @@ namespace Kursovoi.Controllers
         public IActionResult GetSellerAnalytics(string startDate = null, string endDate = null, int categoryId = 0)
         {
             DateTime start, end;
-            // parse incoming dates (expected format yyyy-MM-dd from inputs)
+            // парс входных дат (ожидается формат yyyy-MM-dd из элементов input)
             if (!DateTime.TryParse(startDate, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeLocal, out start))
                 start = DateTime.UtcNow.Date.AddDays(-30);
             if (!DateTime.TryParse(endDate, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeLocal, out end))
                 end = DateTime.UtcNow.Date;
 
-            // make end inclusive (end of the selected day)
+            // сделать конец включающим весь выбранный день
             end = end.Date.AddDays(1).AddTicks(-1);
 
             try
@@ -754,36 +754,58 @@ namespace Kursovoi.Controllers
             }
         }
 
-        // internal builder used by both actions
+        // внутренний сборщик, используемый обоими действиями
         private SellerAnalyticsViewModel GetSellerAnalyticsInternal(DateTime start, DateTime end, int categoryId)
         {
             var vm = new SellerAnalyticsViewModel();
             int storeId = GetSellerStoreId();
             vm.StoreId = storeId;
 
-            // Ensure end is inclusive (cover whole day) in case callers passed date-only values
+            // Предпочитать явное сопоставление магазина из DB хелпера, когда это возможно (может вернуть несколько магазинов для продавца)
+            List<int> sellerStoreIds = new List<int>();
+            try
+            {
+                if (_db != null)
+                {
+                    sellerStoreIds = _db.GetStoreIdsForUser(User?.Identity?.Name ?? string.Empty) ?? new List<int>();
+                }
+            }
+            catch { sellerStoreIds = new List<int>(); }
+            // если DB предоставил один магазин, предпочесть его
+            if (sellerStoreIds.Count == 1)
+            {
+                storeId = sellerStoreIds[0];
+                vm.StoreId = storeId;
+            }
+
+            // убедиться, что end охватывает весь день (на случай, если вызов передал только дату)
             end = end.Date.AddDays(1).AddTicks(-1);
 
-            // fetch products and filter by store/category
+            // получить список продуктов
             var prodResp = Models.UdpClientHelper.SendUdpMessage("getproducts");
             var products = ParseProducts(prodResp);
 
-            // If no products were returned, try a safe DB fallback to get at least count / one placeholder
-            if ((products == null || !products.Any()) && _db != null)
+            // Если seller store id не был найден через getusers, попробуйте вывести его из списка продуктов (возьмите самый распространенный StoreID)
+            if (storeId == 0 && products != null && products.Any())
             {
                 try
                 {
-                    // Try to get one product from DB to show something
-                    var p = _db.GetProductById(1);
-                    if (p != null)
+                    var mostCommon = products.Where(p => p.StoreID > 0).GroupBy(p => p.StoreID).OrderByDescending(g => g.Count()).FirstOrDefault();
+                    if (mostCommon != null)
                     {
-                        products = new List<ProductViewModel> { p };
+                        var inferred = mostCommon.Key;
+                        if (inferred > 0)
+                        {
+                            storeId = inferred;
+                            vm.StoreId = storeId;
+                            vm.Diagnostics = (vm.Diagnostics ?? "") + " | InferredStoreId=" + storeId;
+                        }
                     }
                 }
-                catch { }
+                catch { /* ignore inference errors */ }
             }
 
-            // Ensure we have at least one product to avoid empty charts/tables
+            // убедиться, что есть хотя бы один продукт, чтобы диаграммы/таблицы не были пустыми
             if (products == null || !products.Any())
             {
                 products = new List<ProductViewModel> {
@@ -791,179 +813,394 @@ namespace Kursovoi.Controllers
                 };
             }
 
-            // NOTE: Do not filter products here — show analytics across all products to ensure data is visible.
+            // Диагностика: включить снимок списка продуктов, чтобы мы могли отладить, почему отображается только один продукт
+            try
+            {
+                vm.Diagnostics = "ProductsBeforeFilter: count=" + (products?.Count ?? 0) + "; ids=" + string.Join(',', (products ?? Enumerable.Empty<ProductViewModel>()).Select(x => x.ProductID + ":" + x.StoreID));
+            }
+            catch { vm.Diagnostics = "ProductsBeforeFilter: error while building diagnostics"; }
 
-            // Running out / out of stock
+            // Build effective set of store IDs to filter products by.
+            // Only use explicit DB-derived sellerStoreIds to avoid accidental narrowing when DB is not populated.
+            var effectiveStoreIds = new List<int>();
+            try
+            {
+                if (sellerStoreIds != null && sellerStoreIds.Count > 0)
+                {
+                    effectiveStoreIds.AddRange(sellerStoreIds.Where(x => x > 0));
+                    vm.Diagnostics = (vm.Diagnostics ?? "") + " | EffectiveStoreIdsFromDb=" + string.Join(',', effectiveStoreIds);
+                }
+                else
+                {
+                    vm.Diagnostics = (vm.Diagnostics ?? "") + " | NoSellerStoreIdsInDb - skipping store filter";
+                }
+            }
+            catch { vm.Diagnostics = (vm.Diagnostics ?? "") + " | ErrorBuildingEffectiveStoreIds"; }
+
+            // отфильтровать продукты по магазинам продавца (поддержка нескольких магазинов)
+            if (effectiveStoreIds != null && effectiveStoreIds.Any() && products != null && products.Any())
+            {
+                var originalCount = products.Count;
+                var filtered = products.Where(p => effectiveStoreIds.Contains(p.StoreID)).ToList();
+                try
+                {
+                    vm.Diagnostics += " | ProductsAfterEffectiveStoreFilterAttempt: count=" + filtered.Count + "; ids=" + string.Join(',', filtered.Select(x => x.ProductID + ":" + x.StoreID));
+                }
+                catch { vm.Diagnostics += " | ProductsAfterEffectiveStoreFilterAttempt: diagnostics error"; }
+
+                // apply the filter so analytics reflects all seller stores from DB
+                products = filtered;
+            }
+            else
+            {
+                vm.Diagnostics += " | NoEffectiveStoreIds - skipping store filter";
+            }
+
+            // если передан фильтр по категории, применяем его (если есть данные CategoryId у продукта)
+            if (categoryId > 0 && products != null && products.Any())
+            {
+                products = products.Where(p => (p.CategoryId > 0 && p.CategoryId == categoryId) || (p.CategoryName != null && p.CategoryName == categoryId.ToString())).ToList();
+            }
+
+            // ПРИМЕЧАНИЕ: Ранее здесь мог быть комментарий о не фильтрации — оставлено для справки.
+
+            // Товары на исходе / отсутствующие
+            // Expose full products list to client for analytics display
+            try { vm.AllProducts = products.Select(p => new ProductViewModel { ProductID = p.ProductID, ProductName = p.ProductName, CategoryName = p.CategoryName, Quantity = p.Quantity, StoreID = p.StoreID, Price = p.Price, ImageUrl = p.ImageUrl }).ToList(); } catch { }
+
+            // Populate OutOfStockProducts (quantity == 0) and RunningOutProducts (include ALL products so analytics shows full store inventory)
             foreach (var p in products)
             {
                 if (p.Quantity <= 0)
                 {
                     vm.OutOfStockProducts.Add(new StockAnalyticsItem { ProductID = p.ProductID, ProductName = p.ProductName, Quantity = p.Quantity, LastUpdate = p.StockUpdatedAt == System.DateTime.MinValue ? System.DateTime.MinValue : p.StockUpdatedAt });
                 }
-                else if (p.Quantity <= 10)
-                {
-                    vm.RunningOutProducts.Add(new StockAnalyticsItem { ProductID = p.ProductID, ProductName = p.ProductName, Quantity = p.Quantity, LastUpdate = p.StockUpdatedAt == System.DateTime.MinValue ? System.DateTime.MinValue : p.StockUpdatedAt });
-                }
+
+                // Add every product to RunningOutProducts so stock chart/table displays full product set for seller
+                vm.RunningOutProducts.Add(new StockAnalyticsItem { ProductID = p.ProductID, ProductName = p.ProductName, Quantity = p.Quantity, LastUpdate = p.StockUpdatedAt == System.DateTime.MinValue ? System.DateTime.MinValue : p.StockUpdatedAt });
             }
 
-            // If still empty, add a simple placeholder so UI shows rows
+            // если всё ещё пусто, добавить плейсхолдер, чтобы UI показывал строки
             if (!vm.RunningOutProducts.Any() && !vm.OutOfStockProducts.Any())
             {
                 vm.RunningOutProducts.Add(new StockAnalyticsItem { ProductID = 0, ProductName = "Нет данных по товарам", Quantity = 0, LastUpdate = System.DateTime.MinValue });
             }
 
-            // Orders by date range - prefer DB helper
+            // Diagnostics: counts/ids for stock lists
+            try
+            {
+                vm.Diagnostics += " | RunningOutProductsCount=" + vm.RunningOutProducts.Count + "; ids=" + string.Join(',', vm.RunningOutProducts.Select(x => x.ProductID + ":" + x.Quantity));
+                vm.Diagnostics += " | OutOfStockCount=" + vm.OutOfStockProducts.Count + "; ids=" + string.Join(',', vm.OutOfStockProducts.Select(x => x.ProductID + ":" + x.Quantity));
+            }
+            catch { vm.Diagnostics += " | StockDiagnosticsError"; }
+
+            // Заказы по диапазону дат - предпочитаем получать из БД через _db
             var ordersList = new List<(int OrderId, int ProductId, DateTime CreatedAt, string Status, decimal Total)>();
             try
             {
                 if (_db != null)
                 {
-                    var dbOrders = _db.GetOrdersByDateRange(start, end, storeId);
-                    if (dbOrders != null && dbOrders.Count > 0)
+                    if (effectiveStoreIds != null && effectiveStoreIds.Any())
                     {
-                        foreach (var od in dbOrders)
+                        foreach (var sid in effectiveStoreIds)
                         {
-                            ordersList.Add((od.OrderID, od.ProductID, od.CreatedAt, od.Status ?? string.Empty, od.TotalAmount));
+                            try
+                            {
+                                var dbOrders = _db.GetOrdersByDateRange(start, end, sid);
+                                if (dbOrders != null && dbOrders.Count > 0)
+                                {
+                                    foreach (var od in dbOrders)
+                                    {
+                                        ordersList.Add((od.OrderID, od.ProductID, od.CreatedAt, od.Status ?? string.Empty, od.TotalAmount));
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    else
+                    {
+                        var dbOrders = _db.GetOrdersByDateRange(start, end, storeId);
+                        if (dbOrders != null && dbOrders.Count > 0)
+                        {
+                            foreach (var od in dbOrders)
+                            {
+                                ordersList.Add((od.OrderID, od.ProductID, od.CreatedAt, od.Status ?? string.Empty, od.TotalAmount));
+                            }
                         }
                     }
                 }
             }
             catch { }
 
-            // Fallback to UDP if no orders obtained via DB
+            // резервный вариант через UDP, если не получили заказы из БД
             if (!ordersList.Any())
             {
                 try
                 {
                     var startStr = start.ToString("yyyy-MM-dd");
                     var endStr = end.ToString("yyyy-MM-dd");
-                    var ordersResp = Models.UdpClientHelper.SendUdpMessage($"getordersbydaterange|{startStr}|{endStr}|{storeId}");
-                    if (!string.IsNullOrEmpty(ordersResp))
+                    if (effectiveStoreIds != null && effectiveStoreIds.Any())
                     {
-                        var lines = ordersResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
-                        foreach (var l in lines)
+                        foreach (var sid in effectiveStoreIds)
                         {
-                            var parts = l.Split('|');
-                            if (parts.Length < 5) continue;
-                            if (!int.TryParse(parts[0], out var oid)) continue;
-                            int pid = int.TryParse(parts[1], out var tpid) ? tpid : 0;
-                            DateTime created = DateTime.TryParse(parts[2], out var dt) ? dt : DateTime.MinValue;
-                            string status = parts[3];
-                            decimal total = decimal.TryParse(parts[4], NumberStyles.Any, CultureInfo.InvariantCulture, out var dec) ? dec : 0m;
-                            ordersList.Add((oid, pid, created, status, total));
+                            try
+                            {
+                                var ordersResp = Models.UdpClientHelper.SendUdpMessage($"getordersbydaterange|{startStr}|{endStr}|{sid}");
+                                if (string.IsNullOrEmpty(ordersResp)) continue;
+                                var lines = ordersResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                                foreach (var l in lines)
+                                {
+                                    var parts = l.Split('|');
+                                    if (parts.Length < 5) continue;
+                                    if (!int.TryParse(parts[0], out var oid)) continue;
+                                    int pid = int.TryParse(parts[1], out var tpid) ? tpid : 0;
+                                    DateTime created = DateTime.TryParse(parts[2], out var dt) ? dt : DateTime.MinValue;
+                                    string status = parts[3];
+                                    decimal total = decimal.TryParse(parts[4], NumberStyles.Any, CultureInfo.InvariantCulture, out var dec) ? dec : 0m;
+                                    ordersList.Add((oid, pid, created, status, total));
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    else
+                    {
+                        var ordersResp = Models.UdpClientHelper.SendUdpMessage($"getordersbydaterange|{startStr}|{endStr}|{storeId}");
+                        if (!string.IsNullOrEmpty(ordersResp))
+                        {
+                            var lines = ordersResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                            foreach (var l in lines)
+                            {
+                                var parts = l.Split('|');
+                                if (parts.Length < 5) continue;
+                                if (!int.TryParse(parts[0], out var oid)) continue;
+                                int pid = int.TryParse(parts[1], out var tpid) ? tpid : 0;
+                                DateTime created = DateTime.TryParse(parts[2], out var dt) ? dt : DateTime.MinValue;
+                                string status = parts[3];
+                                decimal total = decimal.TryParse(parts[4], NumberStyles.Any, CultureInfo.InvariantCulture, out var dec) ? dec : 0m;
+                                ordersList.Add((oid, pid, created, status, total));
+                            }
                         }
                     }
                 }
                 catch { }
             }
 
-            // If still no orders, insert a zero-entry so charts render
+            // если всё ещё нет заказов, вставить нулевую запись, чтобы диаграммы могли отобразиться
             if (!ordersList.Any())
             {
                 ordersList.Add((0, 0, DateTime.UtcNow.Date, string.Empty, 0m));
             }
 
-            // group orders by day
+            // группировать заказы по дням
             var ordersByDay = ordersList.Where(o => o.CreatedAt > DateTime.MinValue).GroupBy(o => o.CreatedAt.Date).OrderBy(g => g.Key);
             foreach (var g in ordersByDay)
             {
                 vm.OrdersByDay.Add(new OrderPeriodData { Period = g.Key.ToString("yyyy-MM-dd"), OrderCount = g.Count(), TotalAmount = g.Sum(x => x.Total) });
             }
 
-            // If OrdersByDay is empty for some reason, add today's zero
+            // если OrdersByDay пуст, добавить сегодняшнюю нулевую точку
             if (!vm.OrdersByDay.Any()) vm.OrdersByDay.Add(new OrderPeriodData { Period = DateTime.UtcNow.Date.ToString("yyyy-MM-dd"), OrderCount = 0, TotalAmount = 0m });
 
             vm.AverageOrderAmount = ordersList.Any() ? ordersList.Average(o => o.Total) : 0m;
 
-            // Top selling products - prefer DB via _db; fallback to UDP
+            // Топ продаж — собираем агрегированно по всем effectiveStoreIds, предпочитаем БД
             try
             {
+                var topMap = new Dictionary<int, TopProductItem>();
                 if (_db != null)
                 {
-                    var topDb = _db.GetTopSellingProducts(storeId, start, end);
-                    if (topDb != null && topDb.Count > 0)
+                    if (effectiveStoreIds != null && effectiveStoreIds.Any())
                     {
-                        foreach (var tp in topDb)
+                        foreach (var sid in effectiveStoreIds)
                         {
-                            vm.TopSellingProducts.Add(new TopProductItem { ProductID = tp.ProductID, ProductName = tp.ProductName, QuantitySold = tp.QuantitySold, Revenue = tp.Revenue });
+                            try
+                            {
+                                var topDb = _db.GetTopSellingProducts(sid, start, end);
+                                if (topDb != null && topDb.Count > 0)
+                                {
+                                    foreach (var tp in topDb)
+                                    {
+                                        if (!topMap.ContainsKey(tp.ProductID)) topMap[tp.ProductID] = new TopProductItem { ProductID = tp.ProductID, ProductName = tp.ProductName, QuantitySold = tp.QuantitySold, Revenue = tp.Revenue };
+                                        else { topMap[tp.ProductID].QuantitySold += tp.QuantitySold; topMap[tp.ProductID].Revenue += tp.Revenue; }
+                                    }
+                                }
+                            }
+                            catch { }
                         }
                     }
+                    else
+                    {
+                        var topDb = _db.GetTopSellingProducts(storeId, start, end);
+                        if (topDb != null && topDb.Count > 0)
+                        {
+                            foreach (var tp in topDb)
+                            {
+                                if (!topMap.ContainsKey(tp.ProductID)) topMap[tp.ProductID] = new TopProductItem { ProductID = tp.ProductID, ProductName = tp.ProductName, QuantitySold = tp.QuantitySold, Revenue = tp.Revenue };
+                                else { topMap[tp.ProductID].QuantitySold += tp.QuantitySold; topMap[tp.ProductID].Revenue += tp.Revenue; }
+                            }
+                        }
+                    }
+                }
+
+                // UDP fallback per-store
+                if (!topMap.Any())
+                {
+                    if (effectiveStoreIds != null && effectiveStoreIds.Any())
+                    {
+                        foreach (var sid in effectiveStoreIds)
+                        {
+                            try
+                            {
+                                var topResp = Models.UdpClientHelper.SendUdpMessage($"gettopsellingproducts|{sid}|{start.ToString("yyyy-MM-dd")}|{end.ToString("yyyy-MM-dd")}");
+                                if (string.IsNullOrEmpty(topResp)) continue;
+                                var lines = topResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                                foreach (var l in lines)
+                                {
+                                    var p = l.Split('|');
+                                    if (p.Length < 4) continue;
+                                    if (!int.TryParse(p[0], out var prodId)) continue;
+                                    var name = p[1];
+                                    int qty = int.TryParse(p[2], out var qv) ? qv : 0;
+                                    decimal rev = decimal.TryParse(p[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var rv) ? rv : 0m;
+                                    if (!topMap.ContainsKey(prodId)) topMap[prodId] = new TopProductItem { ProductID = prodId, ProductName = name, QuantitySold = qty, Revenue = rev };
+                                    else { topMap[prodId].QuantitySold += qty; topMap[prodId].Revenue += rev; }
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    else
+                    {
+                        try
+                        {
+                            var topResp = Models.UdpClientHelper.SendUdpMessage($"gettopsellingproducts|{storeId}|{start.ToString("yyyy-MM-dd")}|{end.ToString("yyyy-MM-dd")}");
+                            if (!string.IsNullOrEmpty(topResp))
+                            {
+                                var lines = topResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                                foreach (var l in lines)
+                                {
+                                    var p = l.Split('|');
+                                    if (p.Length < 4) continue;
+                                    if (!int.TryParse(p[0], out var prodId)) continue;
+                                    var name = p[1];
+                                    int qty = int.TryParse(p[2], out var qv) ? qv : 0;
+                                    decimal rev = decimal.TryParse(p[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var rv) ? rv : 0m;
+                                    if (!topMap.ContainsKey(prodId)) topMap[prodId] = new TopProductItem { ProductID = prodId, ProductName = name, QuantitySold = qty, Revenue = rev };
+                                    else { topMap[prodId].QuantitySold += qty; topMap[prodId].Revenue += rev; }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                // push aggregated top products into vm (ensure at least one placeholder)
+                if (topMap.Any()) vm.TopSellingProducts.AddRange(topMap.Values.OrderByDescending(x => x.QuantitySold).ToList());
+            }
+            catch { }
+
+            // Брошенные корзины - предпочитаем БД, затем UDP
+            try
+            {
+                var abSet = new Dictionary<int, BasketAnalyticsItem>();
+                if (_db != null)
+                {
+                    if (effectiveStoreIds != null && effectiveStoreIds.Any())
+                    {
+                        foreach (var sid in effectiveStoreIds)
+                        {
+                            try
+                            {
+                                var abDb = _db.GetAbandonedBaskets(sid, 7);
+                                if (abDb != null && abDb.Count > 0)
+                                {
+                                    foreach (var a in abDb)
+                                    {
+                                        if (!abSet.ContainsKey(a.UserID)) abSet[a.UserID] = new BasketAnalyticsItem { UserID = a.UserID, UserLogin = a.UserLogin, ProductCount = a.ProductCount, TotalAmount = a.TotalAmount, LastActivity = DateTime.MinValue };
+                                        else { abSet[a.UserID].ProductCount += a.ProductCount; abSet[a.UserID].TotalAmount += a.TotalAmount; }
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    else
+                    {
+                        var abDb = _db.GetAbandonedBaskets(storeId, 7);
+                        if (abDb != null && abDb.Count > 0)
+                        {
+                            foreach (var a in abDb)
+                            {
+                                if (!abSet.ContainsKey(a.UserID)) abSet[a.UserID] = new BasketAnalyticsItem { UserID = a.UserID, UserLogin = a.UserLogin, ProductCount = a.ProductCount, TotalAmount = a.TotalAmount, LastActivity = DateTime.MinValue };
+                                else { abSet[a.UserID].ProductCount += a.ProductCount; abSet[a.UserID].TotalAmount += a.TotalAmount; }
+                            }
+                        }
+                    }
+                }
+
+                // UDP fallback per-store
+                if (!abSet.Any())
+                {
+                    if (effectiveStoreIds != null && effectiveStoreIds.Any())
+                    {
+                        foreach (var sid in effectiveStoreIds)
+                        {
+                            try
+                            {
+                                var abandonedResp = Models.UdpClientHelper.SendUdpMessage($"getabandonedbaskets|{sid}|7");
+                                if (string.IsNullOrEmpty(abandonedResp)) continue;
+                                var lines = abandonedResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                                foreach (var l in lines)
+                                {
+                                    var p = l.Split('|');
+                                    if (p.Length < 4) continue;
+                                    int uid = int.TryParse(p[0], out var u) ? u : 0;
+                                    string login = p[1];
+                                    int prodCount = int.TryParse(p[2], out var pc) ? pc : 0;
+                                    decimal total = decimal.TryParse(p[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var tt) ? tt : 0m;
+                                    if (!abSet.ContainsKey(uid)) abSet[uid] = new BasketAnalyticsItem { UserID = uid, UserLogin = login, ProductCount = prodCount, TotalAmount = total, LastActivity = DateTime.MinValue };
+                                    else { abSet[uid].ProductCount += prodCount; abSet[uid].TotalAmount += total; }
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    else
+                    {
+                        try
+                        {
+                            var abandonedResp = Models.UdpClientHelper.SendUdpMessage($"getabandonedbaskets|{storeId}|7");
+                            if (!string.IsNullOrEmpty(abandonedResp))
+                            {
+                                var lines = abandonedResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
+                                foreach (var l in lines)
+                                {
+                                    var p = l.Split('|');
+                                    if (p.Length < 4) continue;
+                                    int uid = int.TryParse(p[0], out var u) ? u : 0;
+                                    string login = p[1];
+                                    int prodCount = int.TryParse(p[2], out var pc) ? pc : 0;
+                                    decimal total = decimal.TryParse(p[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var tt) ? tt : 0m;
+                                    if (!abSet.ContainsKey(uid)) abSet[uid] = new BasketAnalyticsItem { UserID = uid, UserLogin = login, ProductCount = prodCount, TotalAmount = total, LastActivity = DateTime.MinValue };
+                                    else { abSet[uid].ProductCount += prodCount; abSet[uid].TotalAmount += total; }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                if (abSet.Any())
+                {
+                    vm.AbandonedBaskets.AddRange(abSet.Values);
+                    vm.TotalAbandonedBaskets = vm.AbandonedBaskets.Count;
                 }
             }
             catch { }
 
-            if (!vm.TopSellingProducts.Any())
-            {
-                try
-                {
-                    var topResp = Models.UdpClientHelper.SendUdpMessage($"gettopsellingproducts|{storeId}|{start.ToString("yyyy-MM-dd")}|{end.ToString("yyyy-MM-dd")}");
-                    if (!string.IsNullOrEmpty(topResp))
-                    {
-                        var lines = topResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
-                        foreach (var l in lines)
-                        {
-                            var p = l.Split('|');
-                            if (p.Length < 4) continue;
-                            if (!int.TryParse(p[0], out var prodId)) continue;
-                            var name = p[1];
-                            int qty = int.TryParse(p[2], out var qv) ? qv : 0;
-                            decimal rev = decimal.TryParse(p[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var rv) ? rv : 0m;
-                            vm.TopSellingProducts.Add(new TopProductItem { ProductID = prodId, ProductName = name, QuantitySold = qty, Revenue = rev });
-                        }
-                    }
-                }
-                catch { }
-            }
-
-            // Ensure at least one top product placeholder
-            if (!vm.TopSellingProducts.Any()) vm.TopSellingProducts.Add(new TopProductItem { ProductID = 0, ProductName = "Нет данных", QuantitySold = 0, Revenue = 0m });
-
-            // Abandoned baskets - prefer DB then UDP
-            try
-            {
-                if (_db != null)
-                {
-                    var abDb = _db.GetAbandonedBaskets(storeId, 7);
-                    if (abDb != null && abDb.Count > 0)
-                    {
-                        foreach (var a in abDb)
-                        {
-                            vm.AbandonedBaskets.Add(new BasketAnalyticsItem { UserID = a.UserID, UserLogin = a.UserLogin, ProductCount = a.ProductCount, TotalAmount = a.TotalAmount, LastActivity = DateTime.MinValue });
-                        }
-                        vm.TotalAbandonedBaskets = vm.AbandonedBaskets.Count;
-                    }
-                }
-            }
-            catch { }
-
-            if (!vm.AbandonedBaskets.Any())
-            {
-                try
-                {
-                    var abandonedResp = Models.UdpClientHelper.SendUdpMessage($"getabandonedbaskets|{storeId}|7");
-                    if (!string.IsNullOrEmpty(abandonedResp))
-                    {
-                        var lines = abandonedResp.Split(new[] {'\n'}, System.StringSplitOptions.RemoveEmptyEntries);
-                        foreach (var l in lines)
-                        {
-                            var p = l.Split('|');
-                            if (p.Length < 4) continue;
-                            int uid = int.TryParse(p[0], out var u) ? u : 0;
-                            string login = p[1];
-                            int prodCount = int.TryParse(p[2], out var pc) ? pc : 0;
-                            decimal total = decimal.TryParse(p[3], NumberStyles.Any, CultureInfo.InvariantCulture, out var tt) ? tt : 0m;
-                            vm.AbandonedBaskets.Add(new BasketAnalyticsItem { UserID = uid, UserLogin = login, ProductCount = prodCount, TotalAmount = total, LastActivity = DateTime.MinValue });
-                        }
-                        vm.TotalAbandonedBaskets = vm.AbandonedBaskets.Count;
-                    }
-                }
-                catch { }
-            }
-
-            // If still empty, add placeholder
-            if (!vm.AbandonedBaskets.Any()) vm.AbandonedBaskets.Add(new BasketAnalyticsItem { UserID = 0, UserLogin = "Нет данных", ProductCount = 0, TotalAmount = 0m, LastActivity = DateTime.MinValue });
-
-            // Reviews for products (compute average rating) - prefer DB via _db then UDP
+            // Отзывы по продуктам (вычисление среднего рейтинга) - предпочитаем БД через _db, затем UDP
             var allReviews = new List<ReviewAnalyticsItem>();
             foreach (var prod in products)
             {
@@ -1005,6 +1242,13 @@ namespace Kursovoi.Controllers
             vm.TotalReviews = allReviews.Sum(r => r.ReviewCount);
             vm.AverageRating = allReviews.Any() ? allReviews.Average(r => r.AverageRating) : 0m;
 
+            // Diagnostics: reviews
+            try
+            {
+                vm.Diagnostics += " | ReviewsCount=" + vm.ReviewsData.Count + "; ids=" + string.Join(',', vm.ReviewsData.Select(x => x.ProductID + ":" + x.ReviewCount));
+            }
+            catch { vm.Diagnostics += " | ReviewsDiagError"; }
+
             return vm;
         }
 
@@ -1013,32 +1257,35 @@ namespace Kursovoi.Controllers
         {
             if (id <= 0) return BadRequest();
             ProductViewModel? model = null;
-            // try DB first
+            // попробовать сначала через БД
             try { model = _db.GetProductById(id); } catch { model = null; }
+            
             if (model == null)
             {
-                // fallback to UDP
+                // запасной вариант через UDP
                 var resp = Models.UdpClientHelper.SendUdpMessage($"getproductbyid|{id}");
                 if (!string.IsNullOrEmpty(resp))
                 {
                     var parts = resp.Split('|');
                     if (parts.Length >= 9 && int.TryParse(parts[0], out var pid))
                     {
-                        model = new ProductViewModel {
+                        model = new ProductViewModel
+                        {
                             ProductID = pid,
-                            ProductName = parts.Length>1?parts[1]:string.Empty,
-                            CategoryId = parts.Length>2 && int.TryParse(parts[2], out var c)?c:0,
-                            ManufacturerId = parts.Length>3 && int.TryParse(parts[3], out var m)?m:0,
-                            Description = parts.Length>4?parts[4]:string.Empty,
-                            Price = parts.Length>5 && decimal.TryParse(parts[5], NumberStyles.Any, CultureInfo.InvariantCulture, out var pr)?pr:0m,
-                            Discount = parts.Length>6 && decimal.TryParse(parts[6], NumberStyles.Any, CultureInfo.InvariantCulture, out var di)?di:0m,
-                            Quantity = parts.Length>7 && int.TryParse(parts[7], out var q)?q:0,
-                            ImageUrl = parts.Length>8?parts[8]:string.Empty
+                            ProductName = parts.Length > 1 ? parts[1] : string.Empty,
+                            CategoryId = parts.Length > 2 && int.TryParse(parts[2], out var c) ? c : 0,
+                            ManufacturerId = parts.Length > 3 && int.TryParse(parts[3], out var m) ? m : 0,
+                            Description = parts.Length > 4 ? parts[4] : string.Empty,
+                            Price = parts.Length > 5 && decimal.TryParse(parts[5], NumberStyles.Any, CultureInfo.InvariantCulture, out var pr) ? pr : 0m,
+                            Discount = parts.Length > 6 && decimal.TryParse(parts[6], NumberStyles.Any, CultureInfo.InvariantCulture, out var di) ? di : 0m,
+                            Quantity = parts.Length > 7 && int.TryParse(parts[7], out var q) ? q : 0,
+                            ImageUrl = parts.Length > 8 ? parts[8] : string.Empty
                         };
                     }
                 }
             }
-            if (model==null) return NotFound();
+
+            if (model == null) return NotFound();
             ViewData["Categories"] = GetCategories();
             ViewData["Manufacturers"] = GetManufacturers();
             return View(model);
@@ -1057,7 +1304,7 @@ namespace Kursovoi.Controllers
             }
 
             bool ok = false;
-            // try direct DB update first
+            // попробовать прямое обновление БД сначала
             try
             {
                 ok = _db.UpdateProduct(model.ProductID, model.ProductName, model.CategoryId, model.ManufacturerId, model.Description, model.Price, model.Discount, model.Quantity, model.ImageUrl, model.StoreID);
@@ -1067,7 +1314,7 @@ namespace Kursovoi.Controllers
             string usedPath = "db";
             if (!ok)
             {
-                // fallback to UDP command
+                // запасной путь через UDP
                 usedPath = "udp";
                 var cmd = $"updateproduct|{User?.Identity?.Name ?? string.Empty}|{model.ProductID}|{EscapePipe(model.ProductName)}|{model.CategoryId}|{model.ManufacturerId}|{EscapePipe(model.Description)}|{model.Price.ToString(CultureInfo.InvariantCulture)}|{model.Discount.ToString(CultureInfo.InvariantCulture)}|{model.Quantity}|{EscapePipe(model.ImageUrl)}|{model.StoreID}";
                 try
@@ -1081,7 +1328,7 @@ namespace Kursovoi.Controllers
             if (ok)
             {
                 TempData["Message"] = $"Изменено ({usedPath}).";
-                // redirect back to edit so user can see updated values
+                // редирект обратно на страницу редактирования, чтобы пользователь видел обновленные значения
                 return RedirectToAction("EditProduct", new { id = model.ProductID });
             }
             var detail = string.Empty;
@@ -1166,7 +1413,7 @@ namespace Kursovoi.Controllers
                 }
                 else
                 {
-                    // try a harmless query: get store id for current user if available
+                    // попробовать безвредный запрос: получить id магазина для текущего пользователя, если доступен
                     var login = User?.Identity?.Name ?? string.Empty;
                     var sid = _db.GetStoreIdForUser(login);
                     return Json(new { ok = true, storeId = sid, error = _db.LastError });
@@ -1199,7 +1446,7 @@ namespace Kursovoi.Controllers
         {
             if (excelFile == null || excelFile.Length == 0) return RedirectToAction("AddProduct");
 
-            // Save uploaded Excel to temporary uploads for later reporting
+            // сохранить загруженный Excel во временную папку для последующего отчёта
             var tempDir = Path.Combine(Directory.GetCurrentDirectory(), "App_Data", "Uploads");
             if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
             var originalName = Path.GetFileName(excelFile.FileName);
@@ -1242,7 +1489,7 @@ namespace Kursovoi.Controllers
                 using (var workbook = new XLWorkbook(savedPath))
                 {
                     var ws = workbook.Worksheets.First();
-                    // assume first row may be header; we'll detect if first row contains non-numeric CategoryId in cell 2
+                    // предположим, что первая строка может быть заголовком; мы определим, если первая строка содержит нечисловой CategoryId в ячейке 2
                     var firstRow = ws.Row(1);
                     bool firstIsHeader = false;
                     try
@@ -1261,7 +1508,7 @@ namespace Kursovoi.Controllers
                         try
                         {
                             var cells = ws.Row(r).CellsUsed().Select(c => c.GetString()).ToList();
-                            // ensure at least 8 columns as CSV handler
+                            // убедиться, что как минимум 8 колонок, как у обработчика CSV
                             if (cells.Count < 8) { errors.Add($"Строка {row}: недостаточно полей"); continue; }
 
                             var model = new AddProductViewModel();
@@ -1279,7 +1526,7 @@ namespace Kursovoi.Controllers
                             model.Quantity = qty;
                             var imageField = cells.ElementAtOrDefault(7)?.Trim() ?? string.Empty;
 
-                            // locate image among uploaded files by name
+                            // найти изображение среди загруженных файлов по имени
                             string imageUrl = string.Empty;
                             if (!string.IsNullOrEmpty(imageField))
                             {
@@ -1305,7 +1552,7 @@ namespace Kursovoi.Controllers
                                 }
                                 else
                                 {
-                                    // if imageField is a local path on server, try copy
+                                    // если imageField — локальный путь на сервере, попробовать скопировать
                                     if (System.IO.File.Exists(imageField))
                                     {
                                         string safeStore = MakeSafeFileName(storeName);
@@ -1327,11 +1574,11 @@ namespace Kursovoi.Controllers
 
                             model.ImageUrl = imageUrl;
 
-                            // send to server
+                            // отправить на сервер
                             try
                             {
                                 var cmd = $"addproduct|{User?.Identity?.Name ?? string.Empty}|{EscapePipe(model.ProductName)}|{model.CategoryId}|{model.ManufacturerId}|{EscapePipe(model.Description)}|{model.Price.ToString(CultureInfo.InvariantCulture)}|{model.Discount.ToString(CultureInfo.InvariantCulture)}|{model.Quantity}|{EscapePipe(model.ImageUrl)}|{storeId}";
-                                // Try to add directly via DB from web app (preferred)
+                                // Попытка добавить напрямую в БД (предпочтительно)
                                 bool addedViaDb = false;
                                 try
                                 {
@@ -1344,7 +1591,7 @@ namespace Kursovoi.Controllers
                                     errors.Add($"Строка {row}: товар добавлен (DB)");
                                 }
 
-                                // if DB insert failed, try UDP as a fallback
+                                // если вставка в БД не удалась, попробовать через UDP как запасной путь
                                 var resp = Models.UdpClientHelper.SendUdpMessage(cmd);
                                 if (!string.IsNullOrEmpty(resp) && resp.Trim().ToUpper() == "OK")
                                 {
